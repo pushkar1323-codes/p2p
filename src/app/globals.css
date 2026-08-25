@@ -1,6 +1,19 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /*
+   * Temporary system-font fallback. The default scaffold used
+   * next/font/google (Geist/Geist Mono), which fetches font files
+   * from fonts.googleapis.com at build time and fails in offline or
+   * network-restricted environments. Using the system font stack
+   * here removes that build-time network dependency. This is a
+   * placeholder only — final P2P typography is a separate UI task.
+   */
+  --font-geist-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
 }
 
 @media (prefers-color-scheme: dark) {
