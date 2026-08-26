@@ -19,3 +19,31 @@ export interface BalanceState {
   balance: string | null;
   error: BalanceError | null;
 }
+
+/**
+ * XLM transfer domain types.
+ */
+
+export type TransferStatus = "idle" | "submitting" | "success" | "failed";
+
+export type TransferErrorCode =
+  | "INVALID_DESTINATION"
+  | "INVALID_AMOUNT"
+  | "INSUFFICIENT_BALANCE"
+  | "REJECTED"
+  | "SOURCE_ACCOUNT_NOT_FOUND"
+  | "TRANSACTION_FAILED"
+  | "NETWORK_ERROR"
+  | "NOT_CONNECTED"
+  | "UNKNOWN";
+
+export interface TransferError {
+  code: TransferErrorCode;
+  message: string;
+}
+
+export interface TransferState {
+  status: TransferStatus;
+  hash: string | null;
+  error: TransferError | null;
+}

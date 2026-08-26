@@ -3,20 +3,20 @@
 /**
  * Minimal functional XLM balance display for L1-P03.
  *
- * Receives the connected wallet's address/status as props (shared
- * wallet session from the parent page — see ConnectWalletButton for
- * why) and manages its own fetch/loading/error state via
- * useXlmBalance. Plain, restrained styling consistent with
+ * Receives balance state as props (lifted to the parent page in
+ * L1-P04 so TransferForm can reuse the same balance data/refresh
+ * function — see page.tsx) rather than calling useXlmBalance
+ * internally. Plain, restrained styling consistent with
  * ConnectWalletButton; not the final P2P design system.
  */
 
-import { useXlmBalance } from "@/hooks/useXlmBalance";
 import type { WalletStatus } from "@/lib/wallet/types";
+import type { UseXlmBalanceResult } from "@/hooks/useXlmBalance";
 import styles from "./XlmBalance.module.css";
 
 interface XlmBalanceProps {
-  status: WalletStatus;
-  address: string | null;
+  walletStatus: WalletStatus;
+  balance: UseXlmBalanceResult;
 }
 
 function formatBalance(balance: string): string {
@@ -28,14 +28,12 @@ function formatBalance(balance: string): string {
   })} XLM`;
 }
 
-export function XlmBalance({ status, address }: XlmBalanceProps) {
-  const connectedAddress = status === "connected" ? address : null;
-  const { status: balanceStatus, balance, error, refresh } =
-    useXlmBalance(connectedAddress);
-
-  if (status !== "connected") {
+export function XlmBalance({ walletStatus, balance }: XlmBalanceProps) {
+  if (walletStatus !== "connected") {
     return null;
   }
+
+  const { status: balanceStatus, balance: balanceValue, error, refresh } = balance;
 
   return (
     <div className={styles.container}>
@@ -45,8 +43,8 @@ export function XlmBalance({ status, address }: XlmBalanceProps) {
         <span className={styles.value}>Loading balance…</span>
       )}
 
-      {balanceStatus === "loaded" && balance && (
-        <span className={styles.value}>{formatBalance(balance)}</span>
+      {balanceStatus === "loaded" && balanceValue && (
+        <span className={styles.value}>{formatBalance(balanceValue)}</span>
       )}
 
       {balanceStatus === "error" && error && (

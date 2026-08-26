@@ -4,10 +4,14 @@ import Image from "next/image";
 import styles from "./page.module.css";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 import { XlmBalance } from "@/components/wallet/XlmBalance";
+import { TransferForm } from "@/components/wallet/TransferForm";
 import { useWallet } from "@/hooks/useWallet";
+import { useXlmBalance } from "@/hooks/useXlmBalance";
 
 export default function Home() {
   const wallet = useWallet();
+  const connectedAddress = wallet.status === "connected" ? wallet.address : null;
+  const balance = useXlmBalance(connectedAddress);
 
   return (
     <div className={styles.page}>
@@ -21,7 +25,13 @@ export default function Home() {
           priority
         />
         <ConnectWalletButton {...wallet} />
-        <XlmBalance status={wallet.status} address={wallet.address} />
+        <XlmBalance walletStatus={wallet.status} balance={balance} />
+        <TransferForm
+          status={wallet.status}
+          address={wallet.address}
+          availableBalance={balance.balance}
+          onSent={balance.refresh}
+        />
         <div className={styles.intro}>
           <h1>
             To get started, edit the{" "}
