@@ -27,7 +27,7 @@ const DEFAULT_MESSAGES: Record<Exclude<TransferStatus, "idle">, string> = {
   submitted: "Transaction submitted. Waiting for network confirmation…",
   confirmed: "Transaction confirmed.",
   failed: "The transaction could not be completed.",
-  rejected: "You rejected the transaction request in Freighter.",
+  rejected: "Transaction rejected. You rejected the transaction request in Freighter.",
 };
 
 const TONE_BY_STATUS: Record<Exclude<TransferStatus, "idle">, TransactionFeedbackTone> = {
@@ -66,6 +66,11 @@ export function getFeedbackContent(
     message,
     tone,
     showHash: status === "confirmed",
-    showDetail: status === "failed" || status === "rejected",
+    // "rejected" already states the full outcome in its single
+    // message (see DEFAULT_MESSAGES.rejected above); showing the
+    // underlying error.message as well would just repeat the same
+    // fact in different words. "failed" genuinely benefits from the
+    // extra detail line, since its top-level message is generic.
+    showDetail: status === "failed",
   };
 }

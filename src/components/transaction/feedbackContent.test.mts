@@ -72,13 +72,20 @@ test("failed shows error tone and enables the detail section", () => {
   assert.equal(content.showDetail, true);
 });
 
-test("rejected is distinguished from failed with its own message", () => {
+test("rejected is distinguished from failed with its own single, non-redundant message", () => {
   const rejected = getFeedbackContent("rejected");
   const failed = getFeedbackContent("failed");
   assert.equal(rejected.tone, "error");
-  assert.equal(rejected.showDetail, true);
+  // rejected states the full outcome in one message and does not
+  // also show a separate detail line (that would just repeat the
+  // same fact in different words).
+  assert.equal(rejected.showDetail, false);
   assert.notEqual(rejected.message, failed.message);
   assert.match(rejected.message, /rejected/i);
+  assert.equal(
+    rejected.message,
+    "Transaction rejected. You rejected the transaction request in Freighter."
+  );
 });
 
 test("every non-idle TransferStatus produces a visible, non-empty message", () => {
@@ -123,13 +130,14 @@ test("only confirmed enables showHash", () => {
   assert.equal(getFeedbackContent("confirmed").showHash, true);
 });
 
-test("only failed/rejected enable showDetail", () => {
+test("only failed enables showDetail (rejected shows a single combined message instead)", () => {
   const statuses: TransferStatus[] = [
     "idle",
     "preparing",
     "awaiting_signature",
     "submitted",
     "confirmed",
+    "rejected",
   ];
   for (const status of statuses) {
     assert.equal(
@@ -139,5 +147,4 @@ test("only failed/rejected enable showDetail", () => {
     );
   }
   assert.equal(getFeedbackContent("failed").showDetail, true);
-  assert.equal(getFeedbackContent("rejected").showDetail, true);
 });
