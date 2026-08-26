@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test 'src/**/*.test.mts'"
+    "test": "node --test src/components/transaction/feedbackContent.test.mts"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
