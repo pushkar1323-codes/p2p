@@ -1,0 +1,92 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #d0d0d0;
+  font-family: var(--font-geist-sans);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.message {
+  font-size: 13px;
+  margin: 0;
+  color: #171717;
+}
+
+.neutral {
+  border-color: #d0d0d0;
+}
+
+.pending {
+  border-color: #b8b8b8;
+  background: #f5f5f5;
+}
+
+.success {
+  border-color: #1a7f37;
+  background: #f0f9f2;
+}
+
+.success .message {
+  color: #1a7f37;
+  font-weight: 600;
+}
+
+.error {
+  border-color: #b3261e;
+  background: #fbf0ef;
+}
+
+.error .message {
+  color: #b3261e;
+}
+
+.hashBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hashLabel {
+  font-size: 11px;
+  color: #6b6b6b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hashValue {
+  font-family: var(--font-geist-mono);
+  font-size: 12px;
+  color: #171717;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.explorerLink {
+  font-size: 13px;
+  color: #171717;
+  text-decoration: underline;
+  align-self: flex-start;
+}
+
+.detail {
+  font-size: 12px;
+  color: #6b6b6b;
+  margin: 0;
+  word-break: break-word;
+}
+
+@media (max-width: 420px) {
+  .container {
+    padding: 8px 10px;
+  }
+
+  .message {
+    font-size: 12px;
+  }
+}

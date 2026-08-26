@@ -27,6 +27,15 @@ import { signTransaction as freighterSignTransaction } from "@stellar/freighter-
 import { stellarConfig } from "@/config/stellar";
 import type { TransferError } from "./types";
 
+/**
+ * Progress stages `sendXlm` can report mid-flight, so callers (e.g.
+ * `useTransfer`) can reflect finer-grained UI states without
+ * duplicating the submission logic itself. "preparing" is not
+ * reported here because the caller already knows to show it the
+ * moment it calls `sendXlm` (before the source account load begins).
+ */
+export type TransactionProgress = "awaiting_signature" | "submitted";
+
 /** Seconds a submitted transaction remains valid before it expires. */
 const TRANSACTION_TIMEOUT_SECONDS = 60;
 
@@ -60,6 +69,8 @@ export interface SendXlmParams {
   sourceAddress: string;
   destinationAddress: string;
   amount: string;
+  /** Reports awaiting_signature/submitted transitions as they occur. */
+  onProgress?: (stage: TransactionProgress) => void;
 }
 
 /**
@@ -71,6 +82,7 @@ export async function sendXlm({
   sourceAddress,
   destinationAddress,
   amount,
+  onProgress,
 }: SendXlmParams): Promise<string> {
   // Load the source account (and its current sequence number) from
   // Testnet Horizon.
@@ -106,6 +118,7 @@ export async function sendXlm({
     .setTimeout(TRANSACTION_TIMEOUT_SECONDS)
     .build();
 
+  onProgress?.("awaiting_signature");
   const signResult = await freighterSignTransaction(transaction.toXDR(), {
     networkPassphrase: stellarConfig.networkPassphrase,
     address: sourceAddress,
@@ -136,6 +149,7 @@ export async function sendXlm({
   );
 
   try {
+    onProgress?.("submitted");
     const response = await server.submitTransaction(signedTransaction);
     return response.hash;
   } catch (err) {

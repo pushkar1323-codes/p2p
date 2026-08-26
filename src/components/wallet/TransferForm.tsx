@@ -1,18 +1,22 @@
 "use client";
 
 /**
- * Minimal functional XLM transfer form for L1-P04.
+ * Minimal functional XLM transfer form for L1-P04, updated in L1-P05
+ * to delegate all transaction lifecycle messaging to the reusable
+ * TransactionFeedback component instead of duplicating it inline.
  *
  * Receives the connected wallet's address/status and the existing
  * balance state as props (shared session from the parent page — same
  * pattern as ConnectWalletButton/XlmBalance) rather than creating any
- * new wallet or balance mechanism. Plain, restrained styling
- * consistent with the rest of the wallet UI.
+ * new wallet or balance mechanism. useTransfer remains the single
+ * source of truth for transaction state; this component only reads
+ * it and forwards it to TransactionFeedback for display.
  */
 
 import { useState } from "react";
 import { useTransfer } from "@/hooks/useTransfer";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
+import { TransactionFeedback } from "@/components/transaction/TransactionFeedback";
 import type { WalletStatus } from "@/lib/wallet/types";
 import styles from "./TransferForm.module.css";
 
@@ -39,16 +43,17 @@ export function TransferForm({
     onSuccess: onSent,
   });
 
-  const submitting = transferStatus === "submitting";
+  const pending =
+    transferStatus === "preparing" ||
+    transferStatus === "awaiting_signature" ||
+    transferStatus === "submitted";
+  const confirmed = transferStatus === "confirmed";
+  const canRetry = transferStatus === "failed" || transferStatus === "rejected";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (submitting) return;
+    if (pending) return;
     await submit({ destination, amount });
-  }
-
-  function handleRetry() {
-    reset();
   }
 
   if (!connected) {
@@ -61,20 +66,14 @@ export function TransferForm({
     );
   }
 
-  if (transferStatus === "success" && hash) {
+  if (confirmed && hash) {
     return (
       <div className={styles.container}>
-        <p className={styles.successText}>Transfer submitted successfully.</p>
-        <p className={styles.hashLabel}>Transaction hash</p>
-        <p className={styles.hashValue}>{hash}</p>
-        <a
-          className={styles.explorerLink}
-          href={testnetExplorerUrl(hash)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          View on Stellar Testnet Explorer
-        </a>
+        <TransactionFeedback
+          status={transferStatus}
+          hash={hash}
+          explorerUrl={testnetExplorerUrl(hash)}
+        />
         <button
           type="button"
           className={styles.secondaryButton}
@@ -103,7 +102,7 @@ export function TransferForm({
           placeholder="G..."
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
-          disabled={submitting}
+          disabled={pending}
           autoComplete="off"
         />
       </div>
@@ -120,28 +119,26 @@ export function TransferForm({
           placeholder="0.00"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          disabled={submitting}
+          disabled={pending}
           autoComplete="off"
         />
       </div>
 
-      {transferStatus === "failed" && error && (
-        <p className={styles.errorText}>{error.message}</p>
-      )}
+      <TransactionFeedback status={transferStatus} error={error} />
 
       <div className={styles.actions}>
         <button
           type="submit"
           className={styles.primaryButton}
-          disabled={submitting}
+          disabled={pending}
         >
-          {submitting ? "Sending…" : "Send XLM"}
+          {pending ? "Sending…" : "Send XLM"}
         </button>
-        {transferStatus === "failed" && (
+        {canRetry && (
           <button
             type="button"
             className={styles.secondaryButton}
-            onClick={handleRetry}
+            onClick={reset}
           >
             Try again
           </button>

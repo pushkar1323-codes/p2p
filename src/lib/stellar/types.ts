@@ -24,7 +24,14 @@ export interface BalanceState {
  * XLM transfer domain types.
  */
 
-export type TransferStatus = "idle" | "submitting" | "success" | "failed";
+export type TransferStatus =
+  | "idle"
+  | "preparing"
+  | "awaiting_signature"
+  | "submitted"
+  | "confirmed"
+  | "failed"
+  | "rejected";
 
 export type TransferErrorCode =
   | "INVALID_DESTINATION"

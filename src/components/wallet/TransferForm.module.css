@@ -71,41 +71,6 @@
   cursor: pointer;
 }
 
-.errorText {
-  font-size: 13px;
-  color: #b3261e;
-  margin: 0;
-}
-
-.successText {
-  font-size: 14px;
-  color: #1a7f37;
-  margin: 0;
-  font-weight: 600;
-}
-
-.hashLabel {
-  font-size: 12px;
-  color: #6b6b6b;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin: 4px 0 0;
-}
-
-.hashValue {
-  font-family: var(--font-geist-mono);
-  font-size: 12px;
-  color: #171717;
-  word-break: break-all;
-  margin: 0;
-}
-
-.explorerLink {
-  font-size: 13px;
-  color: #171717;
-  text-decoration: underline;
-}
-
 .disabledText {
   font-size: 13px;
   color: #6b6b6b;

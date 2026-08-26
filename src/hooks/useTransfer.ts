@@ -4,16 +4,26 @@
  * useTransfer
  *
  * Drives the XLM send form: validates input, submits the payment via
- * `sendXlm`, and tracks idle/submitting/success/failed state. Does
- * not own balance state itself — accepts the current known balance
- * (for the "amount exceeds balance" check) and a refresh callback so
- * a successful send can refresh the existing balance hook rather than
- * creating a second balance system.
+ * `sendXlm`, and tracks the transaction lifecycle
+ * (idle -> preparing -> awaiting_signature -> submitted -> confirmed,
+ * or -> rejected / failed). `sendXlm` remains the single source of
+ * truth for the actual build/sign/submit sequence; this hook only
+ * maps its progress callbacks and outcome onto TransferState so UI
+ * components (e.g. TransactionFeedback) can render each stage.
+ *
+ * Does not own balance state itself — accepts the current known
+ * balance (for the "amount exceeds balance" check) and a refresh
+ * callback so a successful send can refresh the existing balance hook
+ * rather than creating a second balance system.
  */
 
 import { useCallback, useState } from "react";
 import { isValidStellarAddress, sendXlm } from "@/lib/stellar/transaction";
-import type { TransferError, TransferState } from "@/lib/stellar/types";
+import type {
+  TransferError,
+  TransferState,
+  TransferStatus,
+} from "@/lib/stellar/types";
 
 const idleState: TransferState = {
   status: "idle",
@@ -92,22 +102,24 @@ export function useTransfer({
         return;
       }
 
-      setState({ status: "submitting", hash: null, error: null });
+      setState({ status: "preparing", hash: null, error: null });
 
       try {
         const hash = await sendXlm({
           sourceAddress: sourceAddress as string,
           destinationAddress: input.destination.trim(),
           amount: input.amount,
+          onProgress: (stage) => {
+            setState((prev) => ({ ...prev, status: stage, error: null }));
+          },
         });
-        setState({ status: "success", hash, error: null });
+        setState({ status: "confirmed", hash, error: null });
         onSuccess?.();
       } catch (err) {
-        setState({
-          status: "failed",
-          hash: null,
-          error: normalizeTransferError(err),
-        });
+        const normalized = normalizeTransferError(err);
+        const status: TransferStatus =
+          normalized.code === "REJECTED" ? "rejected" : "failed";
+        setState({ status, hash: null, error: normalized });
       }
     },
     [sourceAddress, availableBalance, onSuccess]
