@@ -1,8 +1,14 @@
+"use client";
+
 import Image from "next/image";
 import styles from "./page.module.css";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
+import { XlmBalance } from "@/components/wallet/XlmBalance";
+import { useWallet } from "@/hooks/useWallet";
 
 export default function Home() {
+  const wallet = useWallet();
+
   return (
     <div className={styles.page}>
       <main className={styles.main}>
@@ -14,7 +20,8 @@ export default function Home() {
           height={20}
           priority
         />
-        <ConnectWalletButton />
+        <ConnectWalletButton {...wallet} />
+        <XlmBalance status={wallet.status} address={wallet.address} />
         <div className={styles.intro}>
           <h1>
             To get started, edit the{" "}

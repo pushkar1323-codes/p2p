@@ -1,0 +1,39 @@
+.container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  font-family: var(--font-geist-sans);
+}
+
+.label {
+  font-size: 12px;
+  color: #6b6b6b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.value {
+  font-family: var(--font-geist-mono);
+  font-size: 14px;
+  color: #171717;
+}
+
+.errorText {
+  font-size: 13px;
+  color: #b3261e;
+  max-width: 260px;
+}
+
+.refreshButton {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #d0d0d0;
+  background: transparent;
+  color: #171717;
+  font-size: 12px;
+  font-family: var(--font-geist-sans);
+  cursor: pointer;
+}
