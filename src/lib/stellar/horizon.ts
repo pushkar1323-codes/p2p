@@ -7,9 +7,18 @@
  * justify the extra dependency weight. If future tasks need
  * transaction building/signing/submission, a proper SDK dependency
  * should be evaluated at that point.
+ *
+ * Generic network/Horizon-communication failures source their
+ * user-facing message from the centralized error module
+ * (`src/lib/errors/appError.ts`, L1-P06) so the same safe wording is
+ * used everywhere a raw network failure occurs. Account-not-found and
+ * invalid-response messages stay specific to this module, since they
+ * are already safe/non-leaking and more helpful than a generic
+ * fallback would be.
  */
 
 import { stellarConfig } from "@/config/stellar";
+import { SAFE_MESSAGES } from "@/lib/errors/appError";
 import type { BalanceError } from "./types";
 
 interface HorizonBalance {
@@ -36,7 +45,7 @@ export async function fetchXlmBalance(address: string): Promise<string> {
   } catch {
     const error: BalanceError = {
       code: "HORIZON_ERROR",
-      message: "Could not reach the Stellar Testnet network. Check your connection and try again.",
+      message: SAFE_MESSAGES.NETWORK_ERROR,
     };
     throw error;
   }
@@ -52,7 +61,7 @@ export async function fetchXlmBalance(address: string): Promise<string> {
   if (!response.ok) {
     const error: BalanceError = {
       code: "HORIZON_ERROR",
-      message: `Stellar Testnet returned an error (${response.status}). Try again shortly.`,
+      message: SAFE_MESSAGES.NETWORK_ERROR,
     };
     throw error;
   }

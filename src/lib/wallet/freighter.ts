@@ -18,26 +18,8 @@ import {
   getNetworkDetails as freighterGetNetworkDetails,
 } from "@stellar/freighter-api";
 import { stellarConfig } from "@/config/stellar";
+import { createAppError, mapFreighterApiError } from "@/lib/errors/appError";
 import type { WalletError } from "./types";
-
-/**
- * Freighter error messages are not a stable enum in the current API
- * (`FreighterApiError` only guarantees `code`/`message`), so rejection
- * is detected via a case-insensitive match against known phrasing.
- * This is intentionally minimal — a fuller mapping belongs to
- * L1-P06 (centralized error mapping), not this task.
- */
-function isUserRejection(message: string | undefined): boolean {
-  if (!message) return false;
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("declin") ||
-    normalized.includes("reject") ||
-    normalized.includes("denied") ||
-    normalized.includes("not allowed") ||
-    normalized.includes("not granted")
-  );
-}
 
 /**
  * Detects whether the Freighter browser extension is installed and
@@ -59,9 +41,10 @@ export async function checkFreighterAvailability(): Promise<boolean> {
 export async function connectFreighter(): Promise<string> {
   const available = await checkFreighterAvailability();
   if (!available) {
+    const appError = createAppError("WALLET_NOT_FOUND");
     const error: WalletError = {
       code: "NOT_INSTALLED",
-      message: "Freighter extension was not detected in this browser.",
+      message: appError.message,
     };
     throw error;
   }
@@ -69,16 +52,11 @@ export async function connectFreighter(): Promise<string> {
   const result = await freighterRequestAccess();
 
   if (result.error) {
-    const rejected = isUserRejection(result.error.message);
-    const error: WalletError = rejected
-      ? {
-          code: "REJECTED",
-          message: "Connection request was rejected in Freighter.",
-        }
-      : {
-          code: "UNKNOWN",
-          message: result.error.message || "Failed to connect to Freighter.",
-        };
+    const mapped = mapFreighterApiError(result.error);
+    const error: WalletError = {
+      code: mapped.code === "REJECTED" ? "REJECTED" : "UNKNOWN",
+      message: mapped.message,
+    };
     throw error;
   }
 

@@ -25,6 +25,11 @@ import {
 } from "@stellar/stellar-sdk";
 import { signTransaction as freighterSignTransaction } from "@stellar/freighter-api";
 import { stellarConfig } from "@/config/stellar";
+import {
+  classifyTransactionFailure,
+  isHorizonNotFoundError,
+  mapFreighterApiError,
+} from "@/lib/errors/appError";
 import type { TransferError } from "./types";
 
 /**
@@ -49,20 +54,6 @@ const server = new Horizon.Server(stellarConfig.horizonUrl);
  */
 export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address.trim());
-}
-
-function isUserRejection(message: string | undefined): boolean {
-  if (!message) return false;
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("declin") ||
-    normalized.includes("reject") ||
-    normalized.includes("denied") ||
-    normalized.includes("not allowed") ||
-    normalized.includes("not granted") ||
-    normalized.includes("user cancelled") ||
-    normalized.includes("user canceled")
-  );
 }
 
 export interface SendXlmParams {
@@ -90,7 +81,7 @@ export async function sendXlm({
   try {
     account = await server.loadAccount(sourceAddress);
   } catch (err) {
-    if (isNotFoundError(err)) {
+    if (isHorizonNotFoundError(err)) {
       const error: TransferError = {
         code: "SOURCE_ACCOUNT_NOT_FOUND",
         message: "Your account was not found on Stellar Testnet. It may not be funded yet.",
@@ -125,13 +116,11 @@ export async function sendXlm({
   });
 
   if (signResult.error) {
-    const rejected = isUserRejection(signResult.error.message);
-    const error: TransferError = rejected
-      ? { code: "REJECTED", message: "Transaction signing was rejected in Freighter." }
-      : {
-          code: "UNKNOWN",
-          message: signResult.error.message || "Failed to sign the transaction.",
-        };
+    const mapped = mapFreighterApiError(signResult.error);
+    const error: TransferError = {
+      code: mapped.code === "REJECTED" ? "REJECTED" : "UNKNOWN",
+      message: mapped.message,
+    };
     throw error;
   }
 
@@ -154,10 +143,13 @@ export async function sendXlm({
     return response.hash;
   } catch (err) {
     if (err instanceof TransactionFailedError) {
-      const { operations } = err.getResultCodes();
+      const mapped = classifyTransactionFailure(err);
       const error: TransferError = {
-        code: "TRANSACTION_FAILED",
-        message: describeFailure(operations),
+        code:
+          mapped.code === "INSUFFICIENT_BALANCE"
+            ? "INSUFFICIENT_BALANCE"
+            : "TRANSACTION_FAILED",
+        message: mapped.message,
       };
       throw error;
     }
@@ -167,29 +159,6 @@ export async function sendXlm({
     };
     throw error;
   }
-}
-
-function isNotFoundError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    typeof (err as { response?: { status?: number } }).response === "object" &&
-    (err as { response?: { status?: number } }).response?.status === 404
-  );
-}
-
-function describeFailure(operationCodes: string[]): string {
-  if (operationCodes.includes("op_underfunded")) {
-    return "Transaction failed: insufficient XLM balance to cover the amount and fee.";
-  }
-  if (operationCodes.includes("op_no_destination")) {
-    return "Transaction failed: the destination account does not exist on Stellar Testnet.";
-  }
-  if (operationCodes.length > 0) {
-    return `Transaction failed on Stellar Testnet (${operationCodes.join(", ")}).`;
-  }
-  return "Transaction failed on Stellar Testnet.";
 }
 
 /**
