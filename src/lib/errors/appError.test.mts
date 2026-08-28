@@ -14,7 +14,7 @@ import {
   createAppError,
   isHorizonNotFoundError,
   isRejectionMessage,
-  mapFreighterApiError,
+  mapWalletApiError,
   mapUnknownError,
 } from "./appError.ts";
 import type { AppErrorCode } from "./appError.ts";
@@ -33,7 +33,7 @@ test("wallet-not-found maps to the required safe message", () => {
 // --- 2. connection rejection mapping ------------------------------
 
 test("wallet connection rejection maps to REJECTED with the safe message", () => {
-  const appError = mapFreighterApiError({
+  const appError = mapWalletApiError({
     message: "User declined access to their public key.",
   });
   assert.equal(appError.code, "REJECTED");
@@ -43,23 +43,24 @@ test("wallet connection rejection maps to REJECTED with the safe message", () =>
 // --- 3. transaction-signing rejection mapping ---------------------
 
 test("transaction signing rejection maps to REJECTED with the safe message", () => {
-  // Freighter reports connection rejection and signing rejection the
-  // same way (a message string on the error object) — mapFreighterApiError
-  // is reused for both, per the module's design.
-  const appError = mapFreighterApiError({
+  // Connection rejection and signing rejection are reported the same
+  // way (a message string on the error object) by every wallet
+  // module — mapWalletApiError is reused for both, per the module's
+  // design.
+  const appError = mapWalletApiError({
     message: "Transaction rejected by user in Freighter.",
   });
   assert.equal(appError.code, "REJECTED");
   assert.equal(appError.message, "The request was rejected in Freighter.");
 });
 
-test("non-rejection Freighter errors map to UNKNOWN_ERROR, never the raw message", () => {
-  const appError = mapFreighterApiError({
-    message: "Some internal Freighter extension failure detail",
+test("non-rejection wallet API errors map to UNKNOWN_ERROR, never the raw message", () => {
+  const appError = mapWalletApiError({
+    message: "Some internal wallet extension failure detail",
   });
   assert.equal(appError.code, "UNKNOWN_ERROR");
   assert.equal(appError.message, "Something went wrong. Please try again.");
-  assert.notEqual(appError.message, "Some internal Freighter extension failure detail");
+  assert.notEqual(appError.message, "Some internal wallet extension failure detail");
 });
 
 // --- 4. insufficient-balance mapping ------------------------------
@@ -177,9 +178,9 @@ test("a raw error containing a sensitive-looking URL/detail never reaches the sa
   assert.equal(appError.internal, sensitive);
 });
 
-test("a rejected Freighter error's raw message is preserved only in .internal, never in .message", () => {
+test("a rejected wallet API error's raw message is preserved only in .internal, never in .message", () => {
   const raw = "User rejected the request in the Freighter popup (session abc123)";
-  const appError = mapFreighterApiError({ message: raw });
+  const appError = mapWalletApiError({ message: raw });
   assert.equal(appError.code, "REJECTED");
   assert.notEqual(appError.message, raw);
   assert.equal(appError.internal, raw);

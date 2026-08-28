@@ -10,7 +10,7 @@
  * module is instead the one place their *messages* come from
  * whenever the underlying error is a raw technical failure, so the
  * classification/sanitization logic that used to be duplicated
- * (with drift risk) between wallet/freighter.ts and
+ * (with drift risk) between lib/wallet/kit.ts and
  * stellar/transaction.ts now has a single implementation.
  *
  * Domain-specific error codes/messages that were already safe and
@@ -75,7 +75,7 @@ export function createAppError(code: AppErrorCode, internal?: string): AppError 
  * Detects Freighter/wallet rejection wording from a raw error
  * message. Single authoritative implementation — previously
  * duplicated (with drift risk) as `isUserRejection` in both
- * wallet/freighter.ts and stellar/transaction.ts.
+ * lib/wallet/kit.ts and stellar/transaction.ts.
  */
 export function isRejectionMessage(message: string | undefined): boolean {
   if (!message) return false;
@@ -92,21 +92,27 @@ export function isRejectionMessage(message: string | undefined): boolean {
 }
 
 /**
- * Maps a raw Freighter API error object to a safe AppError. Used for
- * both wallet-connection rejection (requestAccess) and
- * transaction-signing rejection (signTransaction) — Freighter reports
- * both failure kinds the same way: `{ message?: string }`.
+ * Maps a raw wallet API error object to a safe AppError. Used for
+ * both wallet-connection rejection and transaction-signing
+ * rejection, across any wallet module (Freighter, Albedo, xBull, ...)
+ * offered through the StellarWalletsKit abstraction — they all report
+ * failures the same shape: `{ message?: string }`.
  *
- * The raw Freighter message is NEVER surfaced as the safe `.message`
- * — it is only ever retained in `.internal`.
+ * (Named generically since L2-P01's multi-wallet abstraction: this
+ * was previously `mapFreighterApiError`, used only for Freighter.
+ * The logic is unchanged — only the name now reflects that it's
+ * wallet-agnostic.)
+ *
+ * The raw wallet message is NEVER surfaced as the safe `.message` —
+ * it is only ever retained in `.internal`.
  */
-export function mapFreighterApiError(
-  freighterError: { message?: string } | undefined
+export function mapWalletApiError(
+  walletError: { message?: string } | undefined
 ): AppError {
-  if (isRejectionMessage(freighterError?.message)) {
-    return createAppError("REJECTED", freighterError?.message);
+  if (isRejectionMessage(walletError?.message)) {
+    return createAppError("REJECTED", walletError?.message);
   }
-  return createAppError("UNKNOWN_ERROR", freighterError?.message);
+  return createAppError("UNKNOWN_ERROR", walletError?.message);
 }
 
 /**

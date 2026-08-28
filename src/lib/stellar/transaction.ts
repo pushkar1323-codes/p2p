@@ -2,16 +2,17 @@
  * Stellar Testnet XLM payment transaction module.
  *
  * Handles building a native XLM payment transaction, requesting the
- * user's signature through Freighter, and submitting the signed
- * transaction to Horizon. This is the only module that imports
- * `@stellar/stellar-sdk` for transaction construction/submission, and
- * the only module (besides `wallet/freighter.ts`) that calls into
- * `@stellar/freighter-api`, keeping both integrations isolated from
- * UI code.
+ * user's signature through the currently selected wallet (via the
+ * StellarWalletsKit abstraction, `lib/wallet/kit.ts`), and submitting
+ * the signed transaction to Horizon. This is the only module that
+ * imports `@stellar/stellar-sdk` for transaction construction/
+ * submission. Signing no longer calls Freighter directly (L2-P01) —
+ * it goes through the wallet abstraction, so a transfer works no
+ * matter which supported wallet is connected.
  *
- * No private keys or secrets are ever handled here. Freighter signs
- * the transaction inside the extension; this module only ever sees
- * public account IDs and signed transaction XDR.
+ * No private keys or secrets are ever handled here. The wallet signs
+ * the transaction itself; this module only ever sees public account
+ * IDs and signed transaction XDR.
  */
 
 import {
@@ -23,12 +24,12 @@ import {
   TransactionBuilder,
   TransactionFailedError,
 } from "@stellar/stellar-sdk";
-import { signTransaction as freighterSignTransaction } from "@stellar/freighter-api";
+import { signWithSelectedWallet } from "@/lib/wallet/kit";
 import { stellarConfig } from "@/config/stellar";
 import {
   classifyTransactionFailure,
   isHorizonNotFoundError,
-  mapFreighterApiError,
+  mapWalletApiError,
 } from "@/lib/errors/appError";
 import type { TransferError } from "./types";
 
@@ -110,24 +111,28 @@ export async function sendXlm({
     .build();
 
   onProgress?.("awaiting_signature");
-  const signResult = await freighterSignTransaction(transaction.toXDR(), {
-    networkPassphrase: stellarConfig.networkPassphrase,
-    address: sourceAddress,
-  });
-
-  if (signResult.error) {
-    const mapped = mapFreighterApiError(signResult.error);
-    const error: TransferError = {
-      code: mapped.code === "REJECTED" ? "REJECTED" : "UNKNOWN",
-      message: mapped.message,
-    };
+  let signResult: { signedTxXdr: string; signerAddress?: string };
+  try {
+    signResult = await signWithSelectedWallet(transaction.toXDR(), {
+      networkPassphrase: stellarConfig.networkPassphrase,
+      address: sourceAddress,
+    });
+  } catch (err) {
+    const mapped = mapWalletApiError({ message: errorMessageOf(err) });
+    const error: TransferError =
+      mapped.code === "REJECTED"
+        ? {
+            code: "REJECTED",
+            message: "The request was rejected in your wallet.",
+          }
+        : { code: "UNKNOWN", message: mapped.message };
     throw error;
   }
 
   if (!signResult.signedTxXdr) {
     const error: TransferError = {
       code: "UNKNOWN",
-      message: "Freighter did not return a signed transaction.",
+      message: "The wallet did not return a signed transaction.",
     };
     throw error;
   }
@@ -166,4 +171,13 @@ export async function sendXlm({
  */
 export function testnetExplorerUrl(hash: string): string {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
+}
+
+function errorMessageOf(err: unknown): string | undefined {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const message = (err as { message?: unknown }).message;
+    return typeof message === "string" ? message : undefined;
+  }
+  return undefined;
 }
