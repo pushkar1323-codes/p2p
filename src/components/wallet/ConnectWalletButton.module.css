@@ -6,14 +6,22 @@
 }
 
 .buttonPrimary {
-  padding: 10px 16px;
-  border-radius: 6px;
+  padding: 10px 20px;
+  border-radius: 8px;
   border: 1px solid #171717;
   background: #171717;
   color: #ffffff;
   font-size: 14px;
+  font-weight: 500;
   font-family: var(--font-geist-sans);
   cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .buttonPrimary:hover:not(:disabled) {
+    background: #333333;
+  }
 }
 
 .buttonPrimary:disabled {
@@ -23,35 +31,43 @@
 
 .buttonSecondary {
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid #d0d0d0;
   background: transparent;
   color: #171717;
   font-size: 13px;
   font-family: var(--font-geist-sans);
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .buttonSecondary:hover {
+    background: #f5f5f5;
+  }
+}
+
+.connectedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1a7f37;
+  flex-shrink: 0;
 }
 
 .address {
   font-family: var(--font-geist-mono);
   font-size: 14px;
-  padding: 6px 10px;
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
-}
-
-.walletList {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.walletListLabel {
-  font-size: 12px;
-  color: #6b6b6b;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  color: #171717;
 }
 
 .errorText {

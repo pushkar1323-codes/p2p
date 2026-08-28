@@ -48,6 +48,11 @@ function ensureInitialized(): void {
     modules: [new FreighterModule(), new AlbedoModule(), new xBullModule()],
     network:
       stellarConfig.network === "TESTNET" ? Networks.TESTNET : Networks.PUBLIC,
+    // The native authModal() already indicates which wallets are
+    // installed, since this app now opens it directly from a single
+    // "Connect Wallet" button instead of pre-selecting a wallet via
+    // three separate buttons (L2-P01 UI refinement).
+    authModal: { showInstallLabel: true },
   });
   initialized = true;
 }
@@ -72,21 +77,56 @@ export function selectWallet(id: string): void {
 
 /**
  * Requests the address from the currently selected wallet — the
- * "connect" action. Throws a normalized WalletError on failure,
- * mirroring the previous `connectFreighter()` behavior.
+ * "connect" action. Opens the kit's native `authModal()`, which lets
+ * the user pick Freighter/Albedo/xBull itself (L2-P01 UI refinement:
+ * this app no longer pre-guesses a wallet before opening the modal).
+ *
+ * Because the wallet isn't known until the user picks one *inside*
+ * the modal, `resolveActiveWallet()` reads it back afterward from
+ * `StellarWalletsKit.selectedModule` (which the kit sets as soon as a
+ * choice is made, before requesting the address) so that both the
+ * returned id/name and any thrown error are labeled with the wallet
+ * the user actually chose, not a guess.
+ *
+ * Throws a normalized WalletError on failure, mirroring the previous
+ * `connectFreighter()` behavior.
  */
 export async function connectSelectedWallet(
-  walletName: string,
-  wasAvailable: boolean
-): Promise<string> {
+  wallets: WalletOption[]
+): Promise<{ address: string; walletId: string; walletName: string }> {
   ensureInitialized();
 
   try {
     const { address } = await StellarWalletsKit.authModal();
-    return address;
+    const { id, name } = resolveActiveWallet(wallets);
+    return { address, walletId: id, walletName: name };
   } catch (err) {
-    throw classifyKitError(err, wasAvailable, walletName);
+    const { name, wasAvailable } = resolveActiveWallet(wallets);
+    throw classifyKitError(err, wasAvailable, name);
   }
+}
+
+/**
+ * Reads back whichever wallet is currently active in the kit's own
+ * memory (set by `authModal()` as soon as the user picks one, or by
+ * an explicit `selectWallet()` call) and cross-references it against
+ * this app's known wallet list for a friendly name and installed
+ * state. Falls back to a neutral label if the module isn't in the
+ * known list for some reason (should not normally happen).
+ */
+function resolveActiveWallet(wallets: WalletOption[]): {
+  id: string;
+  name: string;
+  wasAvailable: boolean;
+} {
+  const active = StellarWalletsKit.selectedModule;
+  const id = active?.productId ?? FREIGHTER_ID;
+  const known = wallets.find((wallet) => wallet.id === id);
+  return {
+    id,
+    name: known?.name ?? active?.productName ?? "your wallet",
+    wasAvailable: known?.isAvailable ?? true,
+  };
 }
 
 /**

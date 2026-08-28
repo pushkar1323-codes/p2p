@@ -13,6 +13,15 @@
  * working; `wallets`, `selectedWalletId`, and `selectWallet` are new,
  * additive fields for multi-wallet selection.
  *
+ * L2-P01 UI refinement: `connect()` no longer pre-guesses a wallet
+ * before opening the kit's modal — it calls `connectSelectedWallet()`
+ * with no wallet id pre-selected, so `StellarWalletsKit.authModal()`
+ * shows a neutral Freighter/Albedo/xBull picker itself (see
+ * `lib/wallet/kit.ts`). Whichever wallet the user actually picks is
+ * read back from the kit afterward and stored in `selectedWalletId`.
+ * `selectWallet(id)` still pre-selects a specific wallet before
+ * connecting and is kept for any future custom wallet-picker UI.
+ *
  * Disconnect is local application state only — most wallet modules
  * (including Freighter) have no remote session to revoke, so
  * "disconnect" here means the app forgets the address, not that the
@@ -78,22 +87,25 @@ export function useWallet(): UseWalletResult {
   }, []);
 
   const connectWith = useCallback(
-    async (walletId: string) => {
-      const known = state.wallets.find((w) => w.id === walletId);
-      const walletName = known?.name ?? "Wallet";
-      const wasAvailable = known?.isAvailable ?? true;
-
+    async (walletId?: string) => {
       setState((prev) => ({
         ...prev,
         status: "connecting",
         error: null,
-        selectedWalletId: walletId,
       }));
 
-      kitSelectWallet(walletId);
+      // Only pre-select when a specific wallet id was requested
+      // (selectWallet()). The default connect() flow leaves this
+      // unset so the kit's own authModal() shows a neutral choice
+      // between Freighter/Albedo/xBull, per the L2-P01 single
+      // "Connect Wallet" button UI.
+      if (walletId) {
+        kitSelectWallet(walletId);
+      }
 
       try {
-        const address = await connectSelectedWallet(walletName, wasAvailable);
+        const { address, walletId: resolvedId, walletName } =
+          await connectSelectedWallet(state.wallets);
         const { matches, network } = await getActiveNetwork();
 
         const status: WalletStatus = matches ? "connected" : "wrong_network";
@@ -110,6 +122,7 @@ export function useWallet(): UseWalletResult {
           address,
           network,
           error,
+          selectedWalletId: resolvedId,
         }));
       } catch (err) {
         const walletError = normalizeError(err);
@@ -126,8 +139,8 @@ export function useWallet(): UseWalletResult {
   );
 
   const connect = useCallback(async () => {
-    await connectWith(state.selectedWalletId ?? FREIGHTER_ID);
-  }, [connectWith, state.selectedWalletId]);
+    await connectWith();
+  }, [connectWith]);
 
   const selectWallet = useCallback(
     async (id: string) => {

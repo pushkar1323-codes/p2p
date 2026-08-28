@@ -1,21 +1,26 @@
 "use client";
 
 /**
- * Wallet connection UI, extended in L2-P01 with a wallet picker.
+ * Wallet connection UI (L2-P01 UI refinement).
  *
  * This intentionally uses plain markup/inline-ish styling rather than
  * the final P2P design system, per project scope: full visual design
- * is a later task (see 04_UI_UX.md, 00_MASTER_RULES.md #17).
+ * is a later task (see 04_UI_UX.md, 00_MASTER_RULES.md #17). It does
+ * follow the existing restrained/no-neon palette already established
+ * by this and sibling wallet components (XlmBalance, TransferForm).
  *
  * Accepts wallet state as props (rather than calling `useWallet()`
  * internally) so a single wallet session, created once in the parent
  * page, can be shared with sibling components (XlmBalance,
  * TransferForm) without creating a second, independent connection.
  *
- * L2-P01: renders the wallet options offered by the StellarWalletsKit
- * abstraction (`wallets`, from `useWallet`) instead of a single
- * Freighter-only button, so the user can pick which wallet to connect
- * with. Selecting a wallet both selects and connects it in one click.
+ * A single "Connect Wallet" button opens the StellarWalletsKit's own
+ * `authModal()` (see `lib/wallet/kit.ts`), which lets the user pick
+ * Freighter, Albedo, or xBull itself — replacing the previous L2-P01
+ * implementation's three separate per-wallet buttons. `wallets` and
+ * `selectWallet` are still exposed by `useWallet()` for a possible
+ * future custom-styled picker, but this component no longer renders
+ * them directly.
  */
 
 import styles from "./ConnectWalletButton.module.css";
@@ -30,17 +35,18 @@ export function ConnectWalletButton({
   status,
   address,
   error,
-  wallets,
   connect,
   disconnect,
-  selectWallet,
 }: UseWalletResult) {
   if (status === "connected" && address) {
     return (
       <div className={styles.container}>
-        <span className={styles.address} title={address}>
-          {truncateAddress(address)}
-        </span>
+        <div className={styles.connectedBadge}>
+          <span className={styles.statusDot} aria-hidden="true" />
+          <span className={styles.address} title={address}>
+            {truncateAddress(address)}
+          </span>
+        </div>
         <button className={styles.buttonSecondary} onClick={disconnect}>
           Disconnect
         </button>
@@ -52,33 +58,13 @@ export function ConnectWalletButton({
 
   return (
     <div className={styles.container}>
-      {wallets.length > 0 ? (
-        <div className={styles.walletList}>
-          <span className={styles.walletListLabel}>Connect a wallet</span>
-          {wallets.map((wallet) => (
-            <button
-              key={wallet.id}
-              className={styles.buttonPrimary}
-              onClick={() => selectWallet(wallet.id)}
-              disabled={connecting}
-            >
-              {connecting
-                ? "Connecting..."
-                : wallet.isAvailable
-                  ? wallet.name
-                  : `${wallet.name} (not installed)`}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <button
-          className={styles.buttonPrimary}
-          onClick={connect}
-          disabled={connecting}
-        >
-          {connecting ? "Connecting..." : "Connect Wallet"}
-        </button>
-      )}
+      <button
+        className={styles.buttonPrimary}
+        onClick={connect}
+        disabled={connecting}
+      >
+        {connecting ? "Connecting..." : "Connect Wallet"}
+      </button>
 
       {(status === "not_installed" ||
         status === "rejected" ||
