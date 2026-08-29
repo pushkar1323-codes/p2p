@@ -65,17 +65,15 @@ logic are **not** in the current codebase. They're tracked honestly in
 
 **Connected wallet**
 
-> _Screenshot to be added: a connected Freighter wallet with the truncated
-> account address displayed._
+<img width="667" height="672" alt="Screenshot 2026-08-26 074313" src="https://github.com/user-attachments/assets/d8d72bef-2976-4ea5-9d98-c6fe6b8289b5" />
 
 **XLM balance**
 
-> _Screenshot to be added: the connected account's XLM Testnet balance._
+<img width="732" height="715" alt="Screenshot 2026-08-26 083319" src="https://github.com/user-attachments/assets/b35dfb6a-0e95-4c41-a199-0d2814f8b985" />
 
 **Successful Testnet transaction**
 
-> _Screenshot to be added: the transaction feedback UI in its confirmed
-> state, including the transaction hash and Explorer link._
+<img width="607" height="472" alt="Screenshot 2026-08-26 172008" src="https://github.com/user-attachments/assets/450c94c7-e743-4812-be2f-52eae525b301" />
 
 </div>
 
