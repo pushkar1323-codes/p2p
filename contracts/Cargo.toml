@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = ["loan_registry"]
+
+[workspace.package]
+edition = "2021"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true
+
+# NOTE: Cargo.lock is checked in deliberately and pins several
+# transitive dependencies (curve25519-dalek, ed25519-dalek, sha2,
+# base64ct, zeroize, serde_with, time, indexmap, backtrace/addr2line,
+# ethnum) to older patch versions than a fresh `cargo update` would
+# pick today. This was required to build with the Rust 1.75 toolchain
+# available when this contract was first implemented — several
+# transitive dependencies of soroban-env-host (itself pinned by
+# soroban-sdk) declare unbounded version requirements and had, by the
+# time of writing, published newer major versions requiring a newer
+# Rust edition. A newer local Rust toolchain (rustup, current stable)
+# can likely `cargo update` these normally; this lockfile just makes
+# the build reproducible on an older toolchain without needing to
+# repeat that investigation. See CONTRACT_STATUS_L2-P03.md.
+
