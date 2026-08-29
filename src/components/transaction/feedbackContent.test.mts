@@ -40,12 +40,14 @@ test("preparing shows a pending message and no hash/detail", () => {
   assert.equal(content.showDetail, false);
 });
 
-test("awaiting_signature explicitly tells the user to approve/reject in Freighter", () => {
+test("awaiting_signature tells the user to approve/reject in their connected wallet, not a hardcoded wallet name", () => {
   const content = getFeedbackContent("awaiting_signature");
   assert.equal(content.visible, true);
   assert.equal(content.tone, "pending");
-  assert.match(content.message, /freighter/i);
   assert.match(content.message, /approve|reject/i);
+  // L2-P02: must not assume Freighter now that Albedo/xBull are
+  // also supported wallets.
+  assert.ok(!/freighter/i.test(content.message));
 });
 
 test("submitted indicates the transaction is pending confirmation", () => {
@@ -82,9 +84,12 @@ test("rejected is distinguished from failed with its own single, non-redundant m
   assert.equal(rejected.showDetail, false);
   assert.notEqual(rejected.message, failed.message);
   assert.match(rejected.message, /rejected/i);
+  // L2-P02: must not assume Freighter now that Albedo/xBull are also
+  // supported wallets.
+  assert.ok(!/freighter/i.test(rejected.message));
   assert.equal(
     rejected.message,
-    "Transaction rejected. You rejected the transaction request in Freighter."
+    "Transaction rejected. You rejected the transaction request in your connected wallet."
   );
 });
 

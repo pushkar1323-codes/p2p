@@ -23,11 +23,11 @@ export interface TransactionFeedbackContent {
 
 const DEFAULT_MESSAGES: Record<Exclude<TransferStatus, "idle">, string> = {
   preparing: "Preparing your transaction…",
-  awaiting_signature: "Approve or reject this transaction in Freighter.",
+  awaiting_signature: "Approve or reject this transaction in your connected wallet.",
   submitted: "Transaction submitted. Waiting for network confirmation…",
   confirmed: "Transaction confirmed.",
   failed: "The transaction could not be completed.",
-  rejected: "Transaction rejected. You rejected the transaction request in Freighter.",
+  rejected: "Transaction rejected. You rejected the transaction request in your connected wallet.",
 };
 
 const TONE_BY_STATUS: Record<Exclude<TransferStatus, "idle">, TransactionFeedbackTone> = {

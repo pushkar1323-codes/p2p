@@ -78,6 +78,24 @@ test("op_underfunded transaction failure maps to INSUFFICIENT_BALANCE", () => {
   assert.equal(appError.message, "Insufficient XLM balance for this transaction.");
 });
 
+test("tx_insufficient_balance (can't cover the network fee) also maps to INSUFFICIENT_BALANCE", () => {
+  // A transaction-level failure: the source account can't even cover
+  // the fee, so Horizon never evaluates any operation — `operations`
+  // is empty. Checking only `operations` for op_underfunded would
+  // miss this and misclassify it as a generic TRANSACTION_FAILED,
+  // silently ignoring a genuine "not enough XLM" case (L2-P02).
+  const err = new TransactionFailedError("tx failed", {
+    data: {
+      extras: {
+        result_codes: { transaction: "tx_insufficient_balance", operations: [] },
+      },
+    },
+  });
+  const appError = classifyTransactionFailure(err);
+  assert.equal(appError.code, "INSUFFICIENT_BALANCE");
+  assert.equal(appError.message, "Insufficient XLM balance for this transaction.");
+});
+
 // --- 5. network/Horizon failure mapping ---------------------------
 
 test("Horizon 404 (axios-style) error shape is detected", () => {
@@ -99,6 +117,18 @@ test("generic network failure maps to NETWORK_ERROR via the fallback classifier"
     appError.message,
     "Unable to communicate with the Stellar network. Please try again."
   );
+});
+
+test("tx_insufficient_fee (a bid-too-low fee issue, not a balance issue) does not map to INSUFFICIENT_BALANCE", () => {
+  const err = new TransactionFailedError("tx failed", {
+    data: {
+      extras: {
+        result_codes: { transaction: "tx_insufficient_fee", operations: [] },
+      },
+    },
+  });
+  const appError = classifyTransactionFailure(err);
+  assert.equal(appError.code, "TRANSACTION_FAILED");
 });
 
 // --- 6. transaction failure mapping -------------------------------

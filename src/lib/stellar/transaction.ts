@@ -26,11 +26,8 @@ import {
 } from "@stellar/stellar-sdk";
 import { signWithSelectedWallet } from "@/lib/wallet/kit";
 import { stellarConfig } from "@/config/stellar";
-import {
-  classifyTransactionFailure,
-  isHorizonNotFoundError,
-  mapWalletApiError,
-} from "@/lib/errors/appError";
+import { classifyTransactionFailure, isHorizonNotFoundError } from "@/lib/errors/appError";
+import { classifySignError } from "./signError";
 import type { TransferError } from "./types";
 
 /**
@@ -66,9 +63,10 @@ export interface SendXlmParams {
 }
 
 /**
- * Builds, signs (via Freighter), and submits a native XLM payment
- * transaction on Stellar Testnet. Returns the submitted transaction
- * hash on success. Throws a normalized TransferError on any failure.
+ * Builds, signs (via the currently connected wallet), and submits a
+ * native XLM payment transaction on Stellar Testnet. Returns the
+ * submitted transaction hash on success. Throws a normalized
+ * TransferError on any failure.
  */
 export async function sendXlm({
   sourceAddress,
@@ -118,15 +116,7 @@ export async function sendXlm({
       address: sourceAddress,
     });
   } catch (err) {
-    const mapped = mapWalletApiError({ message: errorMessageOf(err) });
-    const error: TransferError =
-      mapped.code === "REJECTED"
-        ? {
-            code: "REJECTED",
-            message: "The request was rejected in your wallet.",
-          }
-        : { code: "UNKNOWN", message: mapped.message };
-    throw error;
+    throw classifySignError(err);
   }
 
   if (!signResult.signedTxXdr) {
@@ -173,11 +163,4 @@ export function testnetExplorerUrl(hash: string): string {
   return `https://stellar.expert/explorer/testnet/tx/${hash}`;
 }
 
-function errorMessageOf(err: unknown): string | undefined {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null && "message" in err) {
-    const message = (err as { message?: unknown }).message;
-    return typeof message === "string" ? message : undefined;
-  }
-  return undefined;
-}
+export { classifySignError };

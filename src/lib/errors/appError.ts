@@ -135,15 +135,34 @@ export function isHorizonNotFoundError(err: unknown): boolean {
  * a safe AppError, without ever exposing raw Stellar result codes in
  * the user-facing message. Raw codes are retained only in
  * `.internal`.
+ *
+ * Two distinct Horizon result codes both mean "not enough XLM" and
+ * must both resolve to INSUFFICIENT_BALANCE (L2-P02):
+ *  - `op_underfunded` (operation-level): the payment amount itself
+ *    would leave the source account below its required balance/
+ *    minimum reserve.
+ *  - `tx_insufficient_balance` (transaction-level): the source
+ *    account cannot even cover the transaction's network fee. This
+ *    is a transaction-level check that runs before any operation is
+ *    evaluated, so `operations` is typically empty in this case —
+ *    checking `operations` alone would silently miss it and
+ *    misclassify a real insufficient-funds failure as a generic
+ *    TRANSACTION_FAILED.
  */
 export function classifyTransactionFailure(
   err: TransactionFailedError
 ): AppError {
-  const { operations } = err.getResultCodes();
-  const internal = operations.length > 0 ? operations.join(", ") : undefined;
-  if (operations.includes("op_underfunded")) {
+  const { transaction, operations } = err.getResultCodes();
+
+  if (
+    operations.includes("op_underfunded") ||
+    transaction === "tx_insufficient_balance"
+  ) {
+    const internal = operations.length > 0 ? operations.join(", ") : transaction;
     return createAppError("INSUFFICIENT_BALANCE", internal);
   }
+
+  const internal = operations.length > 0 ? operations.join(", ") : undefined;
   return createAppError("TRANSACTION_FAILED", internal);
 }
 
