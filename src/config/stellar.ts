@@ -20,6 +20,7 @@ interface StellarConfig {
   networkPassphrase: string;
   horizonUrl: string;
   sorobanRpcUrl: string;
+  loanRegistryContractId: string;
 }
 
 function requireEnv(name: string, fallback?: string): string {
@@ -50,6 +51,13 @@ export const stellarConfig: StellarConfig = {
   sorobanRpcUrl: requireEnv(
     "NEXT_PUBLIC_SOROBAN_RPC_URL",
     "https://soroban-testnet.stellar.org"
+  ),
+  // Deployed via contracts/scripts/deploy_testnet.sh (L2-P04). See
+  // contracts/loan_registry/DEPLOYMENTS.md for the full deployment
+  // record. This is a public contract ID, not a secret.
+  loanRegistryContractId: requireEnv(
+    "NEXT_PUBLIC_LOAN_REGISTRY_CONTRACT_ID",
+    "CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N20YGH67P7YMJFOD2L7YA"
   ),
 };
 
