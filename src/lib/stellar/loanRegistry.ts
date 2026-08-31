@@ -32,6 +32,7 @@ import { stellarConfig } from "@/config/stellar";
 import {
   classifyReadError,
   classifyWriteError,
+  contractStateExpiredError,
   isContractWriteError,
   isLoanRegistryError,
   parseLoanStatus,
@@ -104,6 +105,47 @@ function getClient(): Promise<contract.Client & LoanRegistryContractApi> {
 }
 
 /**
+ * Maps a read failure (from `getLoanCount`/`getLoanRequest`) to a
+ * safe LoanRegistryError. Checks the SDK's own Soroban-specific error
+ * classes via `instanceof` first — the same approach
+ * `toContractWriteError` below already uses for writes — before
+ * falling back to `classifyReadError`'s text-based network detection.
+ *
+ * `ExpiredState`/`RestorationFailure` specifically cover a real
+ * Soroban condition worth surfacing distinctly: the contract's
+ * on-chain ledger entries have aged out and need restoring. Read-only
+ * simulations (no wallet, no `publicKey`) cannot perform that restore
+ * themselves — it needs a funded, signed transaction — so this
+ * mapping exists to give an honest, specific message rather than the
+ * generic "something went wrong" fallback when this is the cause.
+ */
+function toReadError(err: unknown): LoanRegistryError {
+  const { ExpiredState, RestorationFailure, SimulationFailed, ExternalServiceError } =
+    contract.AssembledTransaction.Errors;
+
+  if (err instanceof ExpiredState || err instanceof RestorationFailure) {
+    const message = err instanceof Error ? err.message : undefined;
+    return contractStateExpiredError(message);
+  }
+  if (err instanceof SimulationFailed) {
+    return {
+      code: "UNKNOWN",
+      message: "Something went wrong reading contract data. Please try again.",
+      internal: err.message,
+    };
+  }
+  if (err instanceof ExternalServiceError) {
+    return {
+      code: "NETWORK_ERROR",
+      message: "Could not reach the Stellar network. Check your connection and try again.",
+      internal: err.message,
+    };
+  }
+
+  return classifyReadError(err);
+}
+
+/**
  * Total number of loan requests ever created (including cancelled
  * ones) — `loan_registry`'s `get_loan_count()`.
  */
@@ -113,7 +155,12 @@ export async function getLoanCount(): Promise<number> {
     const { result } = await client.get_loan_count();
     return Number(result);
   } catch (err) {
-    throw classifyReadError(err);
+    // Deliberate: the only way to see the real underlying SDK/RPC
+    // error in the browser console, since the UI only ever shows
+    // the safe, generic message below. See toReadError()'s doc
+    // comment. (no-console is not an active lint rule here.)
+    console.error("[loan_registry] get_loan_count() failed:", err);
+    throw toReadError(err);
   }
 }
 
@@ -143,7 +190,9 @@ export async function getLoanRequest(loanId: number): Promise<LoanRequest> {
     };
   } catch (err) {
     if (isLoanRegistryError(err)) throw err;
-    throw classifyReadError(err);
+    // See getLoanCount()'s comment above.
+    console.error("[loan_registry] get_loan_request() failed:", err);
+    throw toReadError(err);
   }
 }
 
@@ -192,6 +241,8 @@ export async function createLoanRequest(
     );
     return { txHash, loanId: Number(loanId) };
   } catch (err) {
+    // See getLoanCount()'s comment above.
+    console.error("[loan_registry] create_loan_request() failed:", err);
     throw toContractWriteError(err);
   }
 }
@@ -230,6 +281,8 @@ export async function cancelLoanRequest(
     );
     return { txHash };
   } catch (err) {
+    // See getLoanCount()'s comment above.
+    console.error("[loan_registry] cancel_loan_request() failed:", err);
     throw toContractWriteError(err);
   }
 }

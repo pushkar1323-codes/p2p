@@ -57,7 +57,7 @@ export const stellarConfig: StellarConfig = {
   // record. This is a public contract ID, not a secret.
   loanRegistryContractId: requireEnv(
     "NEXT_PUBLIC_LOAN_REGISTRY_CONTRACT_ID",
-    "CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N20YGH67P7YMJFOD2L7YA"
+    "CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA"
   ),
 };
 

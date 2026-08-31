@@ -28,11 +28,18 @@ export interface LoanRequest {
   status: LoanStatus;
 }
 
-export type LoanRegistryErrorCode = "LOAN_NOT_FOUND" | "NETWORK_ERROR" | "UNKNOWN";
+export type LoanRegistryErrorCode = "LOAN_NOT_FOUND" | "NETWORK_ERROR" | "STATE_EXPIRED" | "UNKNOWN";
 
 export interface LoanRegistryError {
   code: LoanRegistryErrorCode;
   message: string;
+  /**
+   * Optional internal-only detail (the raw SDK/RPC error message),
+   * retained only for logging/debugging — mirrors `AppError.internal`
+   * in `lib/errors/appError.ts`. UI components must NEVER render
+   * this field; only `.message` is safe to display.
+   */
+  internal?: string;
 }
 
 /**
@@ -63,24 +70,72 @@ export function parseLoanStatus(raw: unknown): LoanStatus {
 }
 
 /**
+ * Network-failure text patterns, shared by `classifyReadError` and
+ * `classifyWriteError`.
+ *
+ * BUGFIX (diagnosing the live "Something went wrong reading contract
+ * data" failure): this previously only matched the Node-style
+ * wording `"fetch failed"` (lowercase "f", "failed" second). Real
+ * browsers throw a `TypeError` with different wording — Chrome/Edge:
+ * `"Failed to fetch"` (capitalized, word order reversed — does NOT
+ * match `/fetch failed/i`, since regex substring matching is
+ * order-sensitive even case-insensitively); Firefox:
+ * `"NetworkError when attempting to fetch resource"`; Safari:
+ * `"Load failed"`. None of the browser variants matched the old
+ * pattern, so any genuine network/CORS/DNS failure reaching this
+ * code in a real browser fell through to the generic `UNKNOWN`
+ * branch instead of the more accurate, more helpful `NETWORK_ERROR`
+ * branch — which is exactly the mismatch between the generic message
+ * seen live and what should have been shown.
+ */
+const NETWORK_ERROR_PATTERN =
+  /network|fetch failed|failed to fetch|load failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|timeout|abort/i;
+
+/**
  * Maps a failure from the RPC/simulation layer to a safe,
  * generic-but-informative LoanRegistryError. Never exposes raw
- * RPC/SDK error text to the UI, consistent with this project's
- * existing error-handling convention (appError.ts, kitMapping.ts).
+ * RPC/SDK error text to the UI as `.message`, consistent with this
+ * project's existing error-handling convention (appError.ts,
+ * kitMapping.ts) — the raw text is only ever retained in `.internal`
+ * for logging.
  */
 export function classifyReadError(err: unknown): LoanRegistryError {
   const message = err instanceof Error ? err.message : String(err);
 
-  if (/network|fetch failed|ECONNREFUSED|ENOTFOUND|timeout|abort/i.test(message)) {
+  if (NETWORK_ERROR_PATTERN.test(message)) {
     return {
       code: "NETWORK_ERROR",
       message: "Could not reach the Stellar network. Check your connection and try again.",
+      internal: message,
     };
   }
 
   return {
     code: "UNKNOWN",
     message: "Something went wrong reading contract data. Please try again.",
+    internal: message,
+  };
+}
+
+/**
+ * A Soroban-specific read failure: the contract's on-chain ledger
+ * entries (e.g. its instance/code entries) have expired and need to
+ * be restored before they can be read again. This is a real,
+ * documented Soroban state-archival condition (see
+ * `contract.AssembledTransaction.Errors.ExpiredState` /
+ * `RestorationFailure` in the SDK) — distinct from a network problem
+ * or an unexpected bug, so it gets its own code and a message that
+ * doesn't imply the user did anything wrong or that retrying alone
+ * will fix it. See `loanRegistry.ts`'s `toReadError`, which detects
+ * this via `instanceof` against the real SDK error classes before
+ * falling back to this module's text-based classification.
+ */
+export function contractStateExpiredError(internal?: string): LoanRegistryError {
+  return {
+    code: "STATE_EXPIRED",
+    message:
+      "This contract's on-chain data has expired on Testnet and needs to be restored. Please try again later, or contact the project maintainer.",
+    internal,
   };
 }
 
@@ -90,7 +145,7 @@ export function isLoanRegistryError(err: unknown): err is LoanRegistryError {
     err !== null &&
     "code" in err &&
     "message" in err &&
-    ["LOAN_NOT_FOUND", "NETWORK_ERROR", "UNKNOWN"].includes(
+    ["LOAN_NOT_FOUND", "NETWORK_ERROR", "STATE_EXPIRED", "UNKNOWN"].includes(
       (err as { code: unknown }).code as string
     )
   );
@@ -113,6 +168,8 @@ export type ContractWriteErrorCode =
 export interface ContractWriteError {
   code: ContractWriteErrorCode;
   message: string;
+  /** Same purpose as `LoanRegistryError.internal` — see above. */
+  internal?: string;
 }
 
 const CONTRACT_WRITE_ERROR_CODES: ContractWriteErrorCode[] = [
@@ -156,20 +213,22 @@ export function classifyWriteError(err: unknown): ContractWriteError {
   const message = err instanceof Error ? err.message : undefined;
   const mapped = mapWalletApiError({ message });
   if (mapped.code === "REJECTED") {
-    return { code: "REJECTED", message: "The request was rejected in your wallet." };
+    return { code: "REJECTED", message: "The request was rejected in your wallet.", internal: message };
   }
 
   const text = message ?? String(err);
-  if (/network|fetch failed|ECONNREFUSED|ENOTFOUND|timeout|abort/i.test(text)) {
+  if (NETWORK_ERROR_PATTERN.test(text)) {
     return {
       code: "NETWORK_ERROR",
       message: "Could not reach the Stellar network. Check your connection and try again.",
+      internal: text,
     };
   }
 
   return {
     code: "UNKNOWN",
     message: "Something went wrong submitting the transaction. Please try again.",
+    internal: text,
   };
 }
 

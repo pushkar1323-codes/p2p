@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   classifyReadError,
   classifyWriteError,
+  contractStateExpiredError,
   isContractWriteError,
   isLoanRegistryError,
   parseLoanStatus,
@@ -56,6 +57,31 @@ test("classifyReadError recognizes several network-failure phrasings", () => {
   }
 });
 
+// Regression test for the live "Something went wrong reading contract
+// data" report: real browsers throw network/CORS/DNS failures with
+// wording the old pattern (`/fetch failed/i`, Node-style) did not
+// match, so they fell through to UNKNOWN instead of NETWORK_ERROR.
+test("classifyReadError recognizes real browser fetch-failure wording (not just Node's)", () => {
+  for (const message of [
+    "Failed to fetch", // Chrome/Edge TypeError
+    "NetworkError when attempting to fetch resource.", // Firefox
+    "Load failed", // Safari
+    "TypeError: Failed to fetch",
+  ]) {
+    assert.equal(
+      classifyReadError(new Error(message)).code,
+      "NETWORK_ERROR",
+      `expected "${message}" to classify as NETWORK_ERROR`
+    );
+  }
+});
+
+test("classifyReadError retains the raw message in .internal without putting it in .message", () => {
+  const error = classifyReadError(new Error("Failed to fetch"));
+  assert.equal(error.internal, "Failed to fetch");
+  assert.notEqual(error.message, "Failed to fetch");
+});
+
 test("an unrelated/unexpected error falls back to the safe UNKNOWN classification", () => {
   const error = classifyReadError(new Error("some internal RPC detail"));
   assert.equal(error.code, "UNKNOWN");
@@ -74,6 +100,22 @@ test("classifyReadError handles a non-Error thrown value safely", () => {
   assert.equal(error.code, "UNKNOWN");
 });
 
+// --- contractStateExpiredError ---------------------------------------------
+
+test("contractStateExpiredError returns STATE_EXPIRED with a safe, non-blaming message", () => {
+  const error = contractStateExpiredError("ExpiredStateError: entry has expired");
+  assert.equal(error.code, "STATE_EXPIRED");
+  assert.ok(error.message.length > 0);
+  assert.ok(!/expiredstateerror/i.test(error.message)); // no raw class name leaked
+  assert.equal(error.internal, "ExpiredStateError: entry has expired");
+});
+
+test("contractStateExpiredError works without an internal detail", () => {
+  const error = contractStateExpiredError();
+  assert.equal(error.code, "STATE_EXPIRED");
+  assert.equal(error.internal, undefined);
+});
+
 // --- isLoanRegistryError ---------------------------------------------
 
 test("isLoanRegistryError recognizes a well-formed LoanRegistryError", () => {
@@ -81,6 +123,10 @@ test("isLoanRegistryError recognizes a well-formed LoanRegistryError", () => {
     isLoanRegistryError({ code: "LOAN_NOT_FOUND", message: "No loan request found with id 5." }),
     true
   );
+});
+
+test("isLoanRegistryError recognizes the STATE_EXPIRED code", () => {
+  assert.equal(isLoanRegistryError({ code: "STATE_EXPIRED", message: "x" }), true);
 });
 
 test("isLoanRegistryError rejects plain Errors and other shapes", () => {
@@ -107,6 +153,11 @@ test("classifyWriteError's REJECTED message is wallet-agnostic", () => {
 test("a network-ish failure message maps to NETWORK_ERROR", () => {
   const error = classifyWriteError(new Error("fetch failed"));
   assert.equal(error.code, "NETWORK_ERROR");
+});
+
+test("classifyWriteError also recognizes real browser fetch-failure wording", () => {
+  assert.equal(classifyWriteError(new Error("Failed to fetch")).code, "NETWORK_ERROR");
+  assert.equal(classifyWriteError(new Error("Load failed")).code, "NETWORK_ERROR");
 });
 
 test("classifyWriteError falls back to the safe UNKNOWN classification for unrelated errors", () => {
