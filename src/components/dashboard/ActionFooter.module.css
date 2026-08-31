@@ -1,0 +1,28 @@
+.footerLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--p2p-purple-600);
+  font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.footerLink:hover {
+  color: var(--p2p-purple-700);
+  text-decoration: underline;
+}
+
+.mutedValue {
+  color: var(--p2p-text-tertiary);
+  font-weight: 500;
+}
+
+.errorValue {
+  font-size: var(--p2p-text-base);
+  font-weight: 500;
+  color: var(--p2p-red-600);
+}

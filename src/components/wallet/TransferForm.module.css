@@ -1,36 +1,38 @@
 .container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid #d0d0d0;
-  border-radius: 8px;
-  max-width: 360px;
+  gap: var(--p2p-space-4);
   width: 100%;
-  font-family: var(--font-geist-sans);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .label {
-  font-size: 12px;
-  color: #6b6b6b;
+  font-size: var(--p2p-text-xs);
+  color: var(--p2p-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .input {
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #d0d0d0;
-  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-border-strong);
+  font-size: var(--p2p-text-base);
   font-family: var(--font-geist-mono);
-  color: #171717;
-  background: #ffffff;
+  color: var(--p2p-text-primary);
+  background: var(--p2p-surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input:focus-visible {
+  border-color: var(--p2p-purple-500);
+  box-shadow: 0 0 0 3px var(--p2p-purple-50);
 }
 
 .input:disabled {
@@ -40,19 +42,25 @@
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: var(--p2p-space-2);
   align-items: center;
 }
 
 .primaryButton {
-  padding: 10px 16px;
-  border-radius: 6px;
-  border: 1px solid #171717;
-  background: #171717;
+  padding: 10px 18px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-purple-600);
+  background: var(--p2p-purple-600);
   color: #ffffff;
-  font-size: 14px;
-  font-family: var(--font-geist-sans);
+  font-size: var(--p2p-text-base);
+  font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--p2p-purple-700);
+  border-color: var(--p2p-purple-700);
 }
 
 .primaryButton:disabled {
@@ -61,18 +69,22 @@
 }
 
 .secondaryButton {
-  padding: 8px 14px;
-  border-radius: 6px;
-  border: 1px solid #d0d0d0;
-  background: transparent;
-  color: #171717;
-  font-size: 13px;
-  font-family: var(--font-geist-sans);
+  padding: 9px 16px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-border-strong);
+  background: var(--p2p-surface);
+  color: var(--p2p-text-primary);
+  font-size: var(--p2p-text-sm);
+  font-weight: 500;
   cursor: pointer;
 }
 
+.secondaryButton:hover {
+  background: var(--p2p-bg);
+}
+
 .disabledText {
-  font-size: 13px;
-  color: #6b6b6b;
+  font-size: var(--p2p-text-sm);
+  color: var(--p2p-text-secondary);
   margin: 0;
 }

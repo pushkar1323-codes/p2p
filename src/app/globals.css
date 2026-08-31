@@ -7,20 +7,87 @@
    * next/font/google (Geist/Geist Mono), which fetches font files
    * from fonts.googleapis.com at build time and fails in offline or
    * network-restricted environments. Using the system font stack
-   * here removes that build-time network dependency. This is a
-   * placeholder only — final P2P typography is a separate UI task.
+   * here removes that build-time network dependency.
    */
   --font-geist-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
   --font-geist-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* ------------------------------------------------------------------
+   * P2P design tokens (L2-P07-UI)
+   *
+   * Single source of truth for color, spacing, radius, shadow and
+   * type scale across the dashboard. Sidebar uses the navy scale;
+   * the main workspace uses the light/ink scale. Purple is reserved
+   * for brand/primary actions and active states — not applied to
+   * every element.
+   * ------------------------------------------------------------------ */
+
+  /* Navy (sidebar) */
+  --p2p-navy-950: #0b0b20;
+  --p2p-navy-900: #12122b;
+  --p2p-navy-800: #1c1c3d;
+  --p2p-navy-700: #28284f;
+
+  /* Light workspace */
+  --p2p-bg: #f6f6fb;
+  --p2p-surface: #ffffff;
+  --p2p-border: #e6e6f0;
+  --p2p-border-strong: #d7d7e6;
+
+  /* Text */
+  --p2p-text-primary: #14142b;
+  --p2p-text-secondary: #6b6b8a;
+  --p2p-text-tertiary: #9494ac;
+  --p2p-text-inverse: #f3f3fb;
+  --p2p-text-inverse-muted: #9c9cc2;
+
+  /* Brand / purple */
+  --p2p-purple-50: #f2f0fd;
+  --p2p-purple-100: #e9e6fc;
+  --p2p-purple-500: #6c5ce7;
+  --p2p-purple-600: #5b4fe0;
+  --p2p-purple-700: #4a3fc9;
+
+  /* Status */
+  --p2p-green-50: #e9f9ef;
+  --p2p-green-600: #14a35a;
+  --p2p-green-700: #0f8a4a;
+  --p2p-orange-50: #fdf3e4;
+  --p2p-orange-600: #c9770d;
+  --p2p-red-50: #fbeaea;
+  --p2p-red-600: #d1332e;
+
+  /* Elevation */
+  --p2p-shadow-sm: 0 1px 2px rgba(20, 20, 43, 0.05);
+  --p2p-shadow-md: 0 6px 20px rgba(20, 20, 43, 0.07);
+  --p2p-shadow-lg: 0 16px 40px rgba(20, 20, 43, 0.12);
+
+  /* Radius */
+  --p2p-radius-sm: 8px;
+  --p2p-radius-md: 12px;
+  --p2p-radius-lg: 18px;
+  --p2p-radius-pill: 999px;
+
+  /* Spacing */
+  --p2p-space-1: 4px;
+  --p2p-space-2: 8px;
+  --p2p-space-3: 12px;
+  --p2p-space-4: 16px;
+  --p2p-space-5: 20px;
+  --p2p-space-6: 24px;
+  --p2p-space-8: 32px;
+  --p2p-space-10: 40px;
+
+  /* Type scale */
+  --p2p-text-xs: 12px;
+  --p2p-text-sm: 13px;
+  --p2p-text-base: 14px;
+  --p2p-text-md: 15px;
+  --p2p-text-lg: 18px;
+  --p2p-text-xl: 22px;
+  --p2p-text-2xl: 28px;
 }
 
 html {
@@ -37,9 +104,9 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--p2p-text-primary);
+  background: var(--p2p-bg);
+  font-family: var(--font-geist-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -55,8 +122,11 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--p2p-purple-500);
+  outline-offset: 2px;
 }

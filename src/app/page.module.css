@@ -1,76 +1,28 @@
-.page {
-  --background: #fafafa;
-  --foreground: #fff;
-
-  --text-primary: #000;
-  --text-secondary: #666;
-
-  --border-subtle: #e5e5e5;
-
+.shell {
   display: flex;
   flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-geist-sans);
-  background-color: var(--background);
+  min-height: 100vh;
+  width: 100%;
+  background: var(--p2p-bg);
 }
 
 .main {
   display: flex;
+  flex-direction: column;
   flex: 1;
+  min-width: 0;
+}
+
+.content {
+  flex: 1;
+  padding: var(--p2p-space-8);
+  max-width: 1280px;
   width: 100%;
-  max-width: 800px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 32px;
-  background-color: var(--foreground);
-  padding: 96px 60px;
+  margin: 0 auto;
 }
 
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.brand {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-}
-
-.tagline {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.walletSection {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 16px;
-  width: 100%;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-@media (max-width: 600px) {
-  .main {
-    padding: 48px 24px;
-    gap: 24px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .page {
-    --background: #000;
-    --foreground: #000;
-
-    --text-primary: #ededed;
-    --text-secondary: #999;
-
-    --border-subtle: #1a1a1a;
+@media (max-width: 900px) {
+  .content {
+    padding: var(--p2p-space-5);
   }
 }

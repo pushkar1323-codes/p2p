@@ -1,0 +1,38 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--p2p-radius-pill);
+  font-size: var(--p2p-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.neutral {
+  background: var(--p2p-bg);
+  color: var(--p2p-text-secondary);
+  border: 1px solid var(--p2p-border-strong);
+}
+
+.success {
+  background: var(--p2p-green-50);
+  color: var(--p2p-green-700);
+}
+
+.warning {
+  background: var(--p2p-orange-50);
+  color: var(--p2p-orange-600);
+}
+
+.danger {
+  background: var(--p2p-red-50);
+  color: var(--p2p-red-600);
+}
+
+.brand {
+  background: var(--p2p-purple-50);
+  color: var(--p2p-purple-700);
+}
