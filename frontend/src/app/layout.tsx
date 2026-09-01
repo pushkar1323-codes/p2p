@@ -7,7 +7,11 @@ export const metadata: Metadata = {
     "P2P is a peer-to-peer lending application built on Stellar and Soroban.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>{children}</body>
