@@ -158,7 +158,10 @@ p2p/
 │
 ├── backend/                            # Express/TypeScript API foundation — self-contained project
 │   ├── src/
-│   │   ├── config/env.ts               # Typed, validated environment configuration
+│   │   ├── config/env.ts               # Typed, validated app + database configuration
+│   │   ├── db/
+│   │   │   ├── schema.ts                # Drizzle ORM schema: blockchain_transactions, contract_events
+│   │   │   └── client.ts                # Centralized database client/connection module
 │   │   ├── errors/AppError.ts          # Typed, safe-to-expose application error
 │   │   ├── middleware/
 │   │   │   ├── errorHandler.ts         # Centralized error-handling middleware + 404 handler
@@ -166,6 +169,8 @@ p2p/
 │   │   ├── routes/health.ts            # GET /health
 │   │   ├── app.ts                      # Express app factory (routes + middleware wiring)
 │   │   └── server.ts                   # Process entrypoint
+│   ├── drizzle/                        # Generated SQL migrations (drizzle-kit)
+│   ├── drizzle.config.ts               # Drizzle Kit configuration
 │   ├── package.json, tsconfig.json
 │   └── .env.example                    # Documented environment configuration (no secrets)
 │
@@ -195,7 +200,7 @@ commands for each are run from inside that directory (see
 
 `backend/` is a small, independent Express + TypeScript API. Nothing in
 the frontend calls it yet — it exists as the configuration/validation/
-error-handling foundation future P2P domain endpoints (loan
+error-handling/persistence foundation future P2P domain endpoints (loan
 funding, indexing, etc.) will be built on, not as a product feature
 itself.
 
@@ -206,8 +211,8 @@ Currently implemented:
   process fails fast with a clear message on invalid config rather than
   limping along with `undefined` values.
 - **`GET /health`** — reports status, environment, uptime, and a
-  timestamp. Not yet backed by any database or external service, since
-  none exist yet.
+  timestamp. Not yet backed by any database check, since nothing in the
+  running app queries the database yet.
 - **Centralized error handling** — a single Express error-handling
   middleware turns any thrown error into a safe `{ error: { code,
   message } }` JSON response; unexpected errors are logged in full
@@ -217,9 +222,25 @@ Currently implemented:
 - **Generic request validation** — a reusable Zod-based middleware for
   validating a request's body/query/params, ready for the first real
   endpoint to use.
+- **PostgreSQL persistence foundation** — a typed [Drizzle
+  ORM](https://orm.drizzle.team) schema, a centralized database client,
+  and a SQL migration for exactly two infrastructure tables:
+  - **`blockchain_transactions`** — one row per transaction the backend
+    has observed/submitted (hash, network, lifecycle status, action
+    type, contract id, timestamps, confirmation time, safe
+    error code/message). Unique on transaction hash.
+  - **`contract_events`** — one row per decoded Soroban contract event
+    (transaction hash, contract id, network, event type, ledger
+    sequence where known, JSON payload, timestamp). Unique on
+    (transaction hash, event type) to prevent duplicate ingestion.
 
-No P2P domain logic (loans, users, database) exists in the backend yet
-— see [Roadmap](#-roadmap--future-improvements).
+  Neither table is written to by any route yet — this is infrastructure
+  for a later indexing task, not a live feature. Deliberately **no**
+  P2P domain tables (no `users`/`loans`/`borrowers`/`lenders`/etc.) —
+  see [Roadmap](#-roadmap--future-improvements).
+
+No P2P domain logic (loans, users, business database rows) exists in
+the backend yet.
 
 ## 📜 Smart Contract Overview
 
@@ -266,6 +287,7 @@ Build with the Stellar CLI (not plain `cargo build`):
 |---|---|
 | Frontend framework | [Next.js 16](https://nextjs.org) (App Router) + [React 19](https://react.dev) |
 | Backend framework | [Express 5](https://expressjs.com) + [Zod](https://zod.dev) (validation), TypeScript |
+| Database | [PostgreSQL 16](https://www.postgresql.org) via [Drizzle ORM](https://orm.drizzle.team) + [`pg`](https://node-postgres.com) |
 | Language | TypeScript, Rust |
 | Blockchain SDK | [`@stellar/stellar-sdk`](https://www.npmjs.com/package/@stellar/stellar-sdk) |
 | Wallets | [Freighter](https://www.freighter.app), [Albedo](https://albedo.link), [xBull](https://xbull.app), via [`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit) |
@@ -334,15 +356,39 @@ npm run dev                   # starts the API on http://localhost:4000
 ```
 
 ```bash
-npm test              # 17/17 passing
+npm test              # 35/35 passing with a database configured (see below),
+                       # 32 passing / 3 skipped without one — nothing fails either way
 npx tsc --noEmit       # clean
-npm run build          # compiles to dist/ (test files excluded)
-npm run start           # runs the compiled build
+npm run build           # compiles to dist/ (test files excluded)
+npm run start            # runs the compiled build
 ```
 
 `GET http://localhost:4000/health` is the only endpoint so far. It was
 verified both by its automated test suite and by a manual live run
 (`curl http://localhost:4000/health` against the built server).
+
+**Database (optional for now — nothing in the running app queries it
+yet):**
+
+```bash
+# 1. Run a local PostgreSQL 16 (any local install works; example below
+#    uses the system package on Debian/Ubuntu):
+sudo -u postgres psql -c "CREATE ROLE p2p_backend WITH LOGIN PASSWORD 'p2p_dev_password';"
+sudo -u postgres psql -c "CREATE DATABASE p2p_backend OWNER p2p_backend;"
+
+# 2. Set DATABASE_URL in backend/.env.local (see .env.example for the
+#    matching default), then apply the migration:
+cd backend
+npx drizzle-kit migrate
+
+# 3. Generate a new migration after changing src/db/schema.ts:
+npx drizzle-kit generate
+```
+
+`npm test` automatically runs the live database tests in
+`src/db/client.test.ts` when `DATABASE_URL` is set (each test runs
+inside its own transaction that's always rolled back, so nothing is
+left behind) and skips them cleanly when it isn't.
 
 ## 🚢 Deployment
 
@@ -380,9 +426,10 @@ this repository — only public addresses and public transaction hashes.
 
 ## ⚠️ Limitations
 
-- The backend has no database or persistence layer yet, and nothing in
-  the frontend calls it — all product state is either on the Stellar
-  ledger or held in memory in the browser.
+- The backend's `blockchain_transactions`/`contract_events` tables exist
+  but nothing writes to or reads from them yet, and nothing in the
+  frontend calls the backend at all — all product state today is either
+  on the Stellar ledger or held in memory in the browser.
 - No transaction history — only the most recent transfer/contract-call
   result is shown per session; nothing is stored between sessions.
 - The Loan Registry contract only records loan requests

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseEnv } from "./env.ts";
+import { parseEnv, parseDbEnv } from "./env.ts";
 
 test("parseEnv applies defaults when NODE_ENV/PORT are absent", () => {
   const config = parseEnv({});
@@ -45,5 +45,55 @@ test("parseEnv error message never includes raw secret-shaped values, only field
   } catch (err) {
     assert.ok(err instanceof Error);
     assert.match(err.message, /NODE_ENV/);
+  }
+});
+
+test("parseDbEnv accepts a valid postgres:// connection string and applies defaults", () => {
+  const config = parseDbEnv({
+    DATABASE_URL: "postgres://user:pass@localhost:5432/p2p",
+  });
+  assert.equal(config.DATABASE_URL, "postgres://user:pass@localhost:5432/p2p");
+  assert.equal(config.DB_POOL_MAX, 10);
+  assert.equal(config.DB_SSL, false);
+});
+
+test("parseDbEnv accepts a valid postgresql:// connection string", () => {
+  const config = parseDbEnv({
+    DATABASE_URL: "postgresql://user:pass@localhost:5432/p2p",
+  });
+  assert.equal(config.DATABASE_URL, "postgresql://user:pass@localhost:5432/p2p");
+});
+
+test("parseDbEnv coerces DB_POOL_MAX and parses DB_SSL as a boolean", () => {
+  const config = parseDbEnv({
+    DATABASE_URL: "postgres://user:pass@localhost:5432/p2p",
+    DB_POOL_MAX: "25",
+    DB_SSL: "true",
+  });
+  assert.equal(config.DB_POOL_MAX, 25);
+  assert.equal(config.DB_SSL, true);
+});
+
+test("parseDbEnv rejects a missing DATABASE_URL", () => {
+  assert.throws(
+    () => parseDbEnv({}),
+    /Invalid database configuration/,
+  );
+});
+
+test("parseDbEnv rejects a connection string that isn't a postgres:// URL", () => {
+  assert.throws(
+    () => parseDbEnv({ DATABASE_URL: "mysql://user:pass@localhost/p2p" }),
+    /postgres/,
+  );
+});
+
+test("parseDbEnv error message never leaks the invalid DATABASE_URL's own contents (e.g. an embedded password)", () => {
+  try {
+    parseDbEnv({ DATABASE_URL: "mysql://user:super-secret-pw@localhost/p2p" });
+    assert.fail("expected parseDbEnv to throw");
+  } catch (err) {
+    assert.ok(err instanceof Error);
+    assert.doesNotMatch(err.message, /super-secret-pw/);
   }
 });
