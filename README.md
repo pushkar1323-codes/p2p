@@ -156,6 +156,19 @@ p2p/
 │   ├── package.json, tsconfig.json, next.config.ts, eslint.config.mjs
 │   └── .env.example                   # Documented environment configuration (no secrets)
 │
+├── backend/                            # Express/TypeScript API foundation — self-contained project
+│   ├── src/
+│   │   ├── config/env.ts               # Typed, validated environment configuration
+│   │   ├── errors/AppError.ts          # Typed, safe-to-expose application error
+│   │   ├── middleware/
+│   │   │   ├── errorHandler.ts         # Centralized error-handling middleware + 404 handler
+│   │   │   └── validate.ts             # Generic request-validation middleware (Zod)
+│   │   ├── routes/health.ts            # GET /health
+│   │   ├── app.ts                      # Express app factory (routes + middleware wiring)
+│   │   └── server.ts                   # Process entrypoint
+│   ├── package.json, tsconfig.json
+│   └── .env.example                    # Documented environment configuration (no secrets)
+│
 ├── contracts/                         # Soroban smart contract workspace
 │   ├── Cargo.toml                     # Workspace root, soroban-sdk version, release profile
 │   ├── loan_registry/
@@ -173,9 +186,40 @@ p2p/
 └── README.md                          # You are here (kept at repo root — GitHub convention)
 ```
 
-Each of `frontend/` and `contracts/` is a self-contained project with its own
-dependency manifest, config, and `.gitignore` — commands for each are run
-from inside that directory (see [Getting Started](#-getting-started)).
+Each of `frontend/`, `backend/`, and `contracts/` is a self-contained
+project with its own dependency manifest, config, and `.gitignore` —
+commands for each are run from inside that directory (see
+[Getting Started](#-getting-started)).
+
+## 🖥️ Backend Foundation
+
+`backend/` is a small, independent Express + TypeScript API. Nothing in
+the frontend calls it yet — it exists as the configuration/validation/
+error-handling foundation future P2P domain endpoints (loan
+funding, indexing, etc.) will be built on, not as a product feature
+itself.
+
+Currently implemented:
+
+- **Typed, validated configuration** — every environment variable the
+  backend reads is parsed and validated once at startup with Zod; the
+  process fails fast with a clear message on invalid config rather than
+  limping along with `undefined` values.
+- **`GET /health`** — reports status, environment, uptime, and a
+  timestamp. Not yet backed by any database or external service, since
+  none exist yet.
+- **Centralized error handling** — a single Express error-handling
+  middleware turns any thrown error into a safe `{ error: { code,
+  message } }` JSON response; unexpected errors are logged in full
+  server-side but never expose their raw message or stack trace to the
+  caller. An unmatched route returns a safe 404 JSON error rather than
+  Express's default HTML page.
+- **Generic request validation** — a reusable Zod-based middleware for
+  validating a request's body/query/params, ready for the first real
+  endpoint to use.
+
+No P2P domain logic (loans, users, database) exists in the backend yet
+— see [Roadmap](#-roadmap--future-improvements).
 
 ## 📜 Smart Contract Overview
 
@@ -221,12 +265,13 @@ Build with the Stellar CLI (not plain `cargo build`):
 | Layer | Technology |
 |---|---|
 | Frontend framework | [Next.js 16](https://nextjs.org) (App Router) + [React 19](https://react.dev) |
+| Backend framework | [Express 5](https://expressjs.com) + [Zod](https://zod.dev) (validation), TypeScript |
 | Language | TypeScript, Rust |
 | Blockchain SDK | [`@stellar/stellar-sdk`](https://www.npmjs.com/package/@stellar/stellar-sdk) |
 | Wallets | [Freighter](https://www.freighter.app), [Albedo](https://albedo.link), [xBull](https://xbull.app), via [`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit) |
 | Smart contracts | [Soroban](https://soroban.stellar.org) / [`soroban-sdk`](https://crates.io/crates/soroban-sdk) (Rust, compiled to Wasm) |
 | Network | Stellar Testnet — Horizon (`horizon-testnet.stellar.org`) + Soroban RPC (`soroban-testnet.stellar.org`) |
-| Testing | Node.js built-in test runner (`node --test`) for the frontend; `cargo test` for the contract |
+| Testing | Node.js built-in test runner (`node --test`) for frontend and backend; `cargo test` for the contract |
 
 ## 🛠️ Getting Started
 
@@ -279,6 +324,26 @@ writes and live event observation against the deployed Testnet contract
 have not yet been captured with evidence; everything above is
 build/type/lint/test-level verification.
 
+### Backend development
+
+```bash
+cd backend
+npm install
+cp .env.example .env.local   # optional — sensible defaults apply without it
+npm run dev                   # starts the API on http://localhost:4000
+```
+
+```bash
+npm test              # 17/17 passing
+npx tsc --noEmit       # clean
+npm run build          # compiles to dist/ (test files excluded)
+npm run start           # runs the compiled build
+```
+
+`GET http://localhost:4000/health` is the only endpoint so far. It was
+verified both by its automated test suite and by a manual live run
+(`curl http://localhost:4000/health` against the built server).
+
 ## 🚢 Deployment
 
 The frontend is a standard Next.js app and deploys anywhere Next.js does
@@ -315,8 +380,9 @@ this repository — only public addresses and public transaction hashes.
 
 ## ⚠️ Limitations
 
-- No backend, database, or persistence layer yet — all state is either on
-  the Stellar ledger or held in memory in the browser.
+- The backend has no database or persistence layer yet, and nothing in
+  the frontend calls it — all product state is either on the Stellar
+  ledger or held in memory in the browser.
 - No transaction history — only the most recent transfer/contract-call
   result is shown per session; nothing is stored between sessions.
 - The Loan Registry contract only records loan requests
@@ -337,9 +403,10 @@ this repository — only public addresses and public transaction hashes.
   repayment on top of the existing Loan Registry contract.
 - **Collateral & risk** — collateral locking, loan health, and a
   risk/reputation model.
-- **Backend & indexing** — an API and event-indexing layer for
-  real-time, multi-user state synchronization beyond a single caller's
-  own transactions.
+- **Backend & indexing** — a database, real business endpoints, and an
+  event-indexing layer built on the existing configuration/validation/
+  error-handling foundation, for real-time, multi-user state
+  synchronization beyond a single caller's own transactions.
 - **Borrower & lender dashboards** — portfolio views for each side of a
   loan.
 - **Transaction history** — a persisted, queryable record of past

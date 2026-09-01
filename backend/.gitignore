@@ -1,0 +1,11 @@
+/node_modules
+/dist
+*.tsbuildinfo
+
+# env files (never commit real env files; .env.example is intentionally tracked)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
