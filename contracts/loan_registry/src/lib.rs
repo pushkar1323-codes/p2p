@@ -35,6 +35,22 @@
 //! All four are intentionally small and explicit, per L2-P03's scope
 //! — no admin/config functions, no batch operations, nothing added
 //! "because it might be useful later."
+//!
+//! # Events (L2-P08)
+//!
+//! Two events are published, one per state-changing operation:
+//!
+//! | Operation             | Topics                          | Data                |
+//! |------------------------|----------------------------------|----------------------|
+//! | `create_loan_request`  | `(Symbol("created"), borrower)`  | `(loan_id, amount)`  |
+//! | `cancel_loan_request`  | `(Symbol("cancelled"), borrower)`| `loan_id`            |
+//!
+//! The event name is the first topic (following the common Soroban
+//! convention, e.g. token contracts' `transfer`/`mint` events) and
+//! the borrower's address is the second topic, so a caller can filter
+//! `getEvents` by a specific borrower if useful later. `get_loan_count`
+//! and `get_loan_request` are reads and do not emit events — only the
+//! two operations that actually change state do.
 
 #![no_std]
 
@@ -42,7 +58,7 @@ mod state;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contracterror, contractimpl, Address, Env};
+use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, Env};
 use state::{DataKey, LoanRequest, LoanStatus};
 
 #[contracterror]
@@ -70,6 +86,10 @@ impl LoanRegistry {
     /// address can create a loan request on someone else's behalf.
     /// Returns the new loan request's id (ids start at 1 and
     /// increment; ids are never reused).
+    ///
+    /// Emits a `("created", borrower)` event with `(loan_id, amount)`
+    /// as data (L2-P08) — see the module-level docs below for the
+    /// full event contract.
     pub fn create_loan_request(env: Env, borrower: Address, amount: i128) -> Result<u64, Error> {
         borrower.require_auth();
 
@@ -78,6 +98,18 @@ impl LoanRegistry {
         }
 
         let loan_id = Self::next_loan_id(&env);
+
+        // Emitted before the loan is written to storage so that, if
+        // storage somehow failed after this point, no event would be
+        // observed for a loan that doesn't actually exist — matching
+        // the order state changes should be perceived in. `borrower`
+        // is cloned here because it is moved into `LoanRequest` right
+        // afterward.
+        env.events().publish(
+            (symbol_short!("created"), borrower.clone()),
+            (loan_id, amount),
+        );
+
         let loan = LoanRequest {
             borrower,
             amount,
@@ -96,6 +128,10 @@ impl LoanRegistry {
     /// someone else's loan even if they could somehow call this
     /// function, since they cannot produce a valid authorization for
     /// an address that isn't theirs).
+    ///
+    /// Emits a `("cancelled", borrower)` event with `loan_id` as data
+    /// (L2-P08) — see the module-level docs below for the full event
+    /// contract.
     pub fn cancel_loan_request(env: Env, borrower: Address, loan_id: u64) -> Result<(), Error> {
         borrower.require_auth();
 
@@ -115,6 +151,9 @@ impl LoanRegistry {
 
         loan.status = LoanStatus::Cancelled;
         env.storage().persistent().set(&key, &loan);
+
+        env.events()
+            .publish((symbol_short!("cancelled"), borrower), loan_id);
 
         Ok(())
     }

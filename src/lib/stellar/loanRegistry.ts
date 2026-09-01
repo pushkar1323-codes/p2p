@@ -29,6 +29,8 @@
 import { contract, rpc } from "@stellar/stellar-sdk";
 import { signWithSelectedWallet } from "@/lib/wallet/kit";
 import { stellarConfig } from "@/config/stellar";
+import { extractLoanRegistryEvents } from "./loanRegistryEvents";
+import type { LoanRegistryEvent } from "./loanRegistryEvents";
 import {
   classifyReadError,
   classifyWriteError,
@@ -50,6 +52,7 @@ export type {
   ContractWriteErrorCode,
   ContractWriteError,
 } from "./loanRegistryErrors";
+export type { LoanRegistryEvent } from "./loanRegistryEvents";
 export { classifyReadError, classifyWriteError, parseLoanStatus } from "./loanRegistryErrors";
 
 /**
@@ -213,6 +216,16 @@ export interface CreateLoanRequestParams {
 export interface CreateLoanRequestResult {
   txHash: string;
   loanId: number;
+  /**
+   * The contract's own `created` event for this transaction, decoded
+   * from the transaction result the write flow already fetched to
+   * confirm success (L2-P08 — see `loanRegistryEvents.ts`). `null`
+   * only if the event genuinely could not be found/decoded (should
+   * not normally happen for a confirmed success) — callers must treat
+   * that as an honest "no event data" case, not synthesize one from
+   * `loanId`/the request params instead.
+   */
+  event: LoanRegistryEvent | null;
 }
 
 /**
@@ -239,7 +252,7 @@ export async function createLoanRequest(
       sent.result,
       "Enter an amount greater than zero."
     );
-    return { txHash, loanId: Number(loanId) };
+    return { txHash, loanId: Number(loanId), event: extractConfirmedEvent(sent, "created") };
   } catch (err) {
     // See getLoanCount()'s comment above.
     console.error("[loan_registry] create_loan_request() failed:", err);
@@ -256,6 +269,8 @@ export interface CancelLoanRequestParams {
 
 export interface CancelLoanRequestResult {
   txHash: string;
+  /** Same as `CreateLoanRequestResult.event`, for the `cancelled` event. */
+  event: LoanRegistryEvent | null;
 }
 
 /**
@@ -279,11 +294,37 @@ export async function cancelLoanRequest(
       sent.result,
       "This loan request could not be cancelled — it may not exist, may not belong to this wallet, or may already be cancelled."
     );
-    return { txHash };
+    return { txHash, event: extractConfirmedEvent(sent, "cancelled") };
   } catch (err) {
     // See getLoanCount()'s comment above.
     console.error("[loan_registry] cancel_loan_request() failed:", err);
     throw toContractWriteError(err);
+  }
+}
+
+/**
+ * Decodes the confirmed transaction's `loan_registry` event (L2-P08),
+ * from data `signAndSend()` already fetched — no extra RPC call. Only
+ * ever returns `null` on a genuine absence/decode miss; any
+ * unexpected exception while decoding is caught and logged rather
+ * than allowed to fail the whole write, since the transaction itself
+ * already succeeded (confirmed via `txHash`/`sent.result` above) by
+ * the time this runs — event decoding is enrichment, not the source
+ * of truth for whether the write succeeded.
+ */
+function extractConfirmedEvent(
+  sent: contract.SentTransaction<unknown>,
+  kind: LoanRegistryEvent["kind"]
+): LoanRegistryEvent | null {
+  const response = sent.getTransactionResponse;
+  if (!response || response.status !== rpc.Api.GetTransactionStatus.SUCCESS) return null;
+  const meta = response.resultMetaXdr;
+  try {
+    const events = extractLoanRegistryEvents(meta, stellarConfig.loanRegistryContractId);
+    return events.find((event) => event.kind === kind) ?? null;
+  } catch (err) {
+    console.error("[loan_registry] failed to decode contract event:", err);
+    return null;
   }
 }
 

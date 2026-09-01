@@ -28,6 +28,7 @@ import { useCallback, useReducer, useRef } from "react";
 import { createLoanRequest, cancelLoanRequest } from "@/lib/stellar/loanRegistry";
 import { isContractWriteError } from "@/lib/stellar/loanRegistryErrors";
 import type { ContractWriteError } from "@/lib/stellar/loanRegistry";
+import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import {
   contractWriteReducer,
   initialContractWriteState,
@@ -37,6 +38,16 @@ import {
 export interface LoanRegistryWriteResult {
   /** Present only after a successful createLoanRequest. */
   loanId: number | null;
+  /**
+   * The contract's own `created`/`cancelled` event for this write
+   * (L2-P08), decoded from the confirmed transaction — not
+   * synthesized from the request's local `amount`/`loanId` params.
+   * `null` only if the event genuinely couldn't be found/decoded
+   * (should not normally happen for a confirmed success); consumers
+   * should treat that as an honest gap, not fall back to inventing
+   * one from local state.
+   */
+  event: LoanRegistryEvent | null;
 }
 
 export interface UseLoanRegistryWriteResult
@@ -89,12 +100,12 @@ export function useLoanRegistryWrite(
       dispatch({ type: "PENDING" });
 
       try {
-        const { txHash, loanId } = await createLoanRequest({
+        const { txHash, loanId, event } = await createLoanRequest({
           sourceAddress,
           amount: BigInt(amount),
         });
         if (requestTokenRef.current !== token) return; // superseded
-        dispatch({ type: "SUCCESS", txHash, result: { loanId } });
+        dispatch({ type: "SUCCESS", txHash, result: { loanId, event } });
       } catch (error) {
         if (requestTokenRef.current !== token) return; // superseded
         dispatch({ type: "FAILURE", error: normalizeWriteError(error) });
@@ -115,9 +126,9 @@ export function useLoanRegistryWrite(
       dispatch({ type: "PENDING" });
 
       try {
-        const { txHash } = await cancelLoanRequest({ sourceAddress, loanId });
+        const { txHash, event } = await cancelLoanRequest({ sourceAddress, loanId });
         if (requestTokenRef.current !== token) return; // superseded
-        dispatch({ type: "SUCCESS", txHash, result: { loanId: null } });
+        dispatch({ type: "SUCCESS", txHash, result: { loanId: null, event } });
       } catch (error) {
         if (requestTokenRef.current !== token) return; // superseded
         dispatch({ type: "FAILURE", error: normalizeWriteError(error) });

@@ -127,6 +127,19 @@
   font-size: var(--p2p-text-sm);
 }
 
+.syncBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--p2p-text-xs);
+  font-weight: 600;
+  color: var(--p2p-green-700);
+  background: var(--p2p-green-50);
+  padding: 3px 8px;
+  border-radius: var(--p2p-radius-pill);
+  white-space: nowrap;
+}
+
 @media (max-width: 480px) {
   .form {
     flex-direction: column;

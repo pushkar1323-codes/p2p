@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { PlusIcon, CancelActionIcon } from "@/components/ui/icons";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { PlusIcon, CancelActionIcon, CheckCircleIcon } from "@/components/ui/icons";
 import { TransactionFeedback } from "@/components/transaction/TransactionFeedback";
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
+import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import type { WalletStatus } from "@/lib/wallet/types";
 import styles from "./LoanRequestActions.module.css";
 
@@ -18,6 +20,14 @@ interface LoanRequestActionsProps {
   /** Called after any successful create/cancel, so the caller can
    *  refresh the shared loan count. */
   onSuccess?: () => void;
+  /**
+   * Called once per successful write with the contract's own decoded
+   * `created`/`cancelled` event (L2-P08), so a sibling component
+   * (e.g. Loan Lookup) can synchronize if it happens to be showing
+   * the affected loan. Not called if the event couldn't be decoded —
+   * there is nothing real to report in that case.
+   */
+  onEvent?: (event: LoanRegistryEvent) => void;
 }
 
 /**
@@ -28,7 +38,7 @@ interface LoanRequestActionsProps {
  * Cancel panel and one shared feedback area below, rather than two
  * independent-looking forms that would imply independent state.
  */
-export function LoanRequestActions({ walletStatus, address, onSuccess }: LoanRequestActionsProps) {
+export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }: LoanRequestActionsProps) {
   const [mode, setMode] = useState<Mode>("create");
   const [amount, setAmount] = useState("");
   const [cancelLoanId, setCancelLoanId] = useState("");
@@ -38,6 +48,18 @@ export function LoanRequestActions({ walletStatus, address, onSuccess }: LoanReq
   const { status, txHash, result, error, createLoanRequest, cancelLoanRequest, reset } = write;
 
   const pending = status === "pending";
+
+  // Notifies the parent exactly once per successful write that
+  // produced a decoded event — a ref (not state) tracks which txHash
+  // was already reported, so this doesn't re-fire on unrelated
+  // re-renders and doesn't require onEvent to be stable/memoized.
+  const reportedTxHashRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (status !== "success" || !txHash || !result?.event) return;
+    if (reportedTxHashRef.current === txHash) return;
+    reportedTxHashRef.current = txHash;
+    onEvent?.(result.event);
+  }, [status, txHash, result, onEvent]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -170,6 +192,25 @@ export function LoanRequestActions({ walletStatus, address, onSuccess }: LoanReq
                   : "Loan request cancelled.",
             }}
           />
+
+          {status === "success" && result?.event && (
+            <p className={styles.eventConfirmation}>
+              <CheckCircleIcon width={14} height={14} />
+              <span>
+                Confirmed by the contract&apos;s own <code>{result.event.kind}</code> event — loan #
+                {result.event.loanId}
+                {result.event.kind === "created" ? `, amount ${result.event.amount.toString()}` : ""}, borrower{" "}
+                <AddressChip address={result.event.borrower} visibleChars={4} />
+              </span>
+            </p>
+          )}
+          {status === "success" && !result?.event && (
+            <p className={styles.eventMissingNotice}>
+              The transaction was confirmed, but its on-chain event could not be decoded for
+              display here — this doesn&apos;t affect whether the loan request itself succeeded.
+            </p>
+          )}
+
           {status === "success" && (
             <button
               type="button"

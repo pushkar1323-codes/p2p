@@ -1,24 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { AddressChip } from "@/components/ui/AddressChip";
-import { SearchIcon, AlertIcon, LoanIcon } from "@/components/ui/icons";
+import { SearchIcon, AlertIcon, LoanIcon, RefreshIcon } from "@/components/ui/icons";
 import { useLoanRequest } from "@/hooks/useLoanRequest";
+import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import { LoanStatusBadge } from "./LoanStatusBadge";
 import styles from "./LoanLookup.module.css";
 
 /** A non-negative integer loan id, e.g. "0", "12". */
 const LOAN_ID_PATTERN = /^\d+$/;
 
-export function LoanLookup() {
+interface LoanLookupProps {
+  /**
+   * The most recent confirmed `create`/`cancel` event from
+   * `LoanRequestActions` (L2-P08), if any. When it names the loan
+   * currently shown here, this component re-reads that loan from the
+   * contract automatically — genuine event-driven sync, not a
+   * polling loop, and it does nothing when no loan is being viewed or
+   * the event is about a different loan.
+   */
+  syncSignal?: LoanRegistryEvent | null;
+}
+
+export function LoanLookup({ syncSignal }: LoanLookupProps) {
   const [input, setInput] = useState("");
   const [loanId, setLoanId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [justSynced, setJustSynced] = useState(false);
 
   const { status, data, error, refresh } = useLoanRequest(loanId);
+
+  // Re-reads the currently-viewed loan when a create/cancel event for
+  // that exact loan id comes in from the sibling Loan Actions panel.
+  // Guarded by object identity (via the ref) so this only fires once
+  // per new event, not on every render.
+  const handledSignalRef = useRef<LoanRegistryEvent | null>(null);
+  useEffect(() => {
+    if (!syncSignal || syncSignal === handledSignalRef.current) return;
+    handledSignalRef.current = syncSignal;
+    if (loanId === null || syncSignal.loanId !== loanId) return;
+    refresh();
+    // setState is deferred (rather than called synchronously in the
+    // effect body) per the react-hooks/set-state-in-effect rule —
+    // this still shows/hides within the same tick for the user, just
+    // not as a same-render cascading update.
+    const showTimer = setTimeout(() => setJustSynced(true), 0);
+    const hideTimer = setTimeout(() => setJustSynced(false), 4000);
+    return () => {
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+    };
+  }, [syncSignal, loanId, refresh]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +80,14 @@ export function LoanLookup() {
         icon={<SearchIcon width={18} height={18} />}
         title="Loan Lookup"
         description="Read a loan request directly from the deployed loan_registry contract."
+        action={
+          justSynced ? (
+            <span className={styles.syncBadge}>
+              <RefreshIcon width={12} height={12} />
+              Updated from on-chain event
+            </span>
+          ) : undefined
+        }
       />
 
       <form className={styles.form} onSubmit={handleSubmit}>
