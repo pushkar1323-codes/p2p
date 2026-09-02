@@ -30,8 +30,9 @@ export class AppError extends Error {
     code: string,
     message: string,
     details?: unknown,
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "AppError";
     this.statusCode = statusCode;
     this.code = code;
@@ -48,5 +49,20 @@ export class AppError extends Error {
 
   static notFound(message: string): AppError {
     return new AppError(404, "NOT_FOUND", message);
+  }
+
+  /**
+   * A downstream persistence/database failure — distinct from
+   * `badRequest`/`validationFailed`, which mean the caller's input was
+   * the problem. 503 signals the caller's input was fine and the
+   * operation is safe to retry once the underlying failure clears,
+   * rather than something to "fix" before resubmitting.
+   */
+  static persistenceFailed(
+    message: string,
+    details?: unknown,
+    options?: { cause?: unknown },
+  ): AppError {
+    return new AppError(503, "PERSISTENCE_FAILED", message, details, options);
   }
 }
