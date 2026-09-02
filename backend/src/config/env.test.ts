@@ -2,10 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseEnv, parseDbEnv } from "./env.ts";
 
-test("parseEnv applies defaults when NODE_ENV/PORT are absent", () => {
+test("parseEnv applies defaults when NODE_ENV/PORT/CORS_ORIGIN are absent", () => {
   const config = parseEnv({});
   assert.equal(config.NODE_ENV, "development");
   assert.equal(config.PORT, 4000);
+  assert.equal(config.CORS_ORIGIN, "http://localhost:3000");
+});
+
+test("parseEnv accepts a custom CORS_ORIGIN", () => {
+  const config = parseEnv({ CORS_ORIGIN: "https://app.example.com" });
+  assert.equal(config.CORS_ORIGIN, "https://app.example.com");
 });
 
 test("parseEnv accepts a valid, fully-specified environment", () => {

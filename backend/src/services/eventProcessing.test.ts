@@ -10,6 +10,8 @@ import {
 import { AppError } from "../errors/AppError.ts";
 import { createDbClient, type Database, type DbClient } from "../db/client.ts";
 import { contractEvents } from "../db/schema.ts";
+import type { EventBroadcaster } from "../realtime/eventBroadcaster.ts";
+import type { ContractEventUpdate } from "../realtime/types.ts";
 
 // ---------------------------------------------------------------------
 // Pure validation tests — no database involved at all.
@@ -221,6 +223,97 @@ test("processContractEvent surfaces an unexpected persistence failure as AppErro
 });
 
 // ---------------------------------------------------------------------
+// Real-time broadcast integration (L3-P05) — a fake, always-succeeding
+// db (no live Postgres required) plus a spy broadcaster, proving
+// exactly when processContractEvent does and does not call
+// `broadcast()`.
+// ---------------------------------------------------------------------
+
+/** A `db` fake whose `insert(...).returning()` always reports a fresh insert (empty conflict never occurs). */
+function makeSucceedingDb(): Database {
+  let lastValues: Record<string, unknown> = {};
+  const chain = {
+    insert: () => chain,
+    values: (v: Record<string, unknown>) => {
+      lastValues = v;
+      return chain;
+    },
+    onConflictDoNothing: () => chain,
+    returning: () => Promise.resolve([{ id: randomUUID(), createdAt: new Date(), ...lastValues }]),
+  };
+  return chain as unknown as Database;
+}
+
+function spyBroadcaster(): { broadcaster: EventBroadcaster; calls: ContractEventUpdate[] } {
+  const calls: ContractEventUpdate[] = [];
+  return {
+    calls,
+    broadcaster: {
+      subscribe: () => {},
+      unsubscribe: () => {},
+      broadcast: (update) => {
+        calls.push(update);
+      },
+      clientCount: () => 0,
+    },
+  };
+}
+
+test("processContractEvent broadcasts an update after a fresh insert", async () => {
+  const { broadcaster, calls } = spyBroadcaster();
+  const input = validInput({ transactionHash: "tx-broadcast-1" });
+
+  const result = await processContractEvent(input, makeSucceedingDb(), broadcaster);
+
+  assert.equal(result.outcome, "inserted");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].type, "contract-event");
+  assert.equal(calls[0].transactionHash, "tx-broadcast-1");
+  assert.equal(calls[0].contractId, input.contractId);
+  assert.equal(calls[0].network, input.network);
+  assert.equal(calls[0].eventType, input.eventType);
+  assert.equal(calls[0].ledgerSequence, input.ledgerSequence);
+  assert.deepEqual(calls[0].payload, input.payload);
+  assert.ok(typeof calls[0].occurredAt === "string" && !Number.isNaN(Date.parse(calls[0].occurredAt)));
+});
+
+test("processContractEvent does not broadcast when validation fails", async () => {
+  const { broadcaster, calls } = spyBroadcaster();
+
+  await assert.rejects(() => processContractEvent({ transactionHash: "only-one-field" }, undefined, broadcaster));
+
+  assert.equal(calls.length, 0);
+});
+
+test("processContractEvent does not broadcast when persistence fails", async () => {
+  const { broadcaster, calls } = spyBroadcaster();
+  const failingDb = makeFailingDb(new Error("simulated connection failure"));
+
+  await assert.rejects(() => processContractEvent(validInput(), failingDb, broadcaster));
+
+  assert.equal(calls.length, 0);
+});
+
+test("a broadcaster failure is logged and swallowed, not surfaced as a processContractEvent failure", async () => {
+  const throwingBroadcaster: EventBroadcaster = {
+    subscribe: () => {},
+    unsubscribe: () => {},
+    broadcast: () => {
+      throw new Error("simulated broadcaster failure");
+    },
+    clientCount: () => 0,
+  };
+
+  const result = await processContractEvent(
+    validInput({ transactionHash: "tx-broadcast-failure" }),
+    makeSucceedingDb(),
+    throwingBroadcaster,
+  );
+
+  assert.equal(result.outcome, "inserted");
+});
+
+// ---------------------------------------------------------------------
 // Live PostgreSQL integration tests — skipped automatically (not
 // failed) when DATABASE_URL isn't set. Each test runs inside its own
 // transaction that is always rolled back, so no test data is left
@@ -300,6 +393,30 @@ test(
             ),
           );
         assert.equal(rows.length, 1, "reprocessing must not create a duplicate row");
+      });
+    } finally {
+      await client.close();
+    }
+  },
+);
+
+test(
+  "processing the same event twice broadcasts exactly once, not again for the duplicate",
+  { skip: !hasDb && "DATABASE_URL not set — skipping live database tests" },
+  async () => {
+    const client = createDbClient(process.env.DATABASE_URL);
+    try {
+      await inRolledBackTransaction(client, async (tx) => {
+        const { broadcaster, calls } = spyBroadcaster();
+        const input = validInput();
+
+        const first = await processContractEvent(input, tx, broadcaster);
+        assert.equal(first.outcome, "inserted");
+        assert.equal(calls.length, 1);
+
+        const second = await processContractEvent(input, tx, broadcaster);
+        assert.equal(second.outcome, "duplicate");
+        assert.equal(calls.length, 1, "the duplicate must not trigger a second broadcast");
       });
     } finally {
       await client.close();

@@ -12,6 +12,13 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
+  // The frontend origin allowed to call this API cross-origin
+  // (browser CORS). Needed as of L3-P05: the frontend's SSE client
+  // (`EventSource`) connects to `/events/stream` from a different
+  // origin (Next.js dev server) than this API, and a browser blocks
+  // reading a cross-origin response without this header regardless of
+  // whether the request itself succeeded server-side.
+  CORS_ORIGIN: z.string().min(1).default("http://localhost:3000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

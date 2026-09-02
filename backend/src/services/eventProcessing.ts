@@ -3,6 +3,8 @@ import type { Database } from "../db/client.ts";
 import { getDb } from "../db/client.ts";
 import { contractEvents } from "../db/schema.ts";
 import { AppError } from "../errors/AppError.ts";
+import { getEventBroadcaster, type EventBroadcaster } from "../realtime/eventBroadcaster.ts";
+import type { ContractEventUpdate } from "../realtime/types.ts";
 
 /**
  * Raw, not-yet-trusted description of a single Stellar/Soroban contract
@@ -165,13 +167,29 @@ export function validateAndNormalizeEvent(
  * **Not wired to any HTTP route** — a future Stellar event
  * ingestion/indexing task calls this directly with already-decoded
  * event data, exactly as this task's scope requires.
+ *
+ * **Real-time delivery (L3-P05)**: once — and only once — an event is
+ * *freshly* persisted (`outcome: "inserted"`), the normalized event is
+ * broadcast to connected SSE clients via `broadcaster` (defaulting to
+ * the process-wide `getEventBroadcaster()` singleton, same optional/
+ * injectable convention as `db`). A `duplicate` outcome is never
+ * broadcast again — it was already broadcast the first time it was
+ * inserted, and every field of a duplicate is identical to that
+ * original broadcast by definition. Broadcasting only happens after
+ * the database write has actually succeeded: persistence and
+ * real-time delivery stay logically separate steps, and a broadcaster
+ * failure (e.g. a client write erroring) is caught and logged, never
+ * allowed to turn an already-successful persistence into a thrown
+ * error.
  */
 export async function processContractEvent(
   input: RawContractEventInput,
   db?: Database,
+  broadcaster?: EventBroadcaster,
 ): Promise<ProcessContractEventResult> {
-  // Validate before resolving or touching the database at all — so
-  // invalid input is rejected even if no database is configured yet.
+  // Validate before resolving or touching the database (or the
+  // broadcaster) at all — so invalid input is rejected, and nothing is
+  // ever broadcast, even if no database is configured yet.
   const normalized = validateAndNormalizeEvent(input);
   const database = db ?? getDb().db;
 
@@ -199,6 +217,7 @@ export async function processContractEvent(
   }
 
   if (insertedRows.length > 0) {
+    broadcastInsertedEvent(normalized, broadcaster ?? getEventBroadcaster());
     return { outcome: "inserted", event: normalized };
   }
 
@@ -241,4 +260,33 @@ export async function processContractEvent(
         }
       : normalized,
   };
+}
+
+/**
+ * Broadcasts a freshly-persisted event to connected SSE clients.
+ * Deliberately fire-and-forget from the caller's perspective: a
+ * broadcast failure (e.g. one client's connection erroring mid-write)
+ * is logged and swallowed here, never re-thrown, so it can never turn
+ * an already-successful database write into a failed
+ * `processContractEvent` call.
+ */
+function broadcastInsertedEvent(
+  event: NormalizedContractEvent,
+  broadcaster: EventBroadcaster,
+): void {
+  const update: ContractEventUpdate = {
+    type: "contract-event",
+    transactionHash: event.transactionHash,
+    contractId: event.contractId,
+    network: event.network,
+    eventType: event.eventType,
+    ledgerSequence: event.ledgerSequence,
+    payload: event.payload,
+    occurredAt: new Date().toISOString(),
+  };
+  try {
+    broadcaster.broadcast(update);
+  } catch (err) {
+    console.error("Failed to broadcast a persisted contract event:", err);
+  }
 }
