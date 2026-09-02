@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::{Error, LoanRegistry, LoanRegistryClient};
-use crate::state::LoanStatus;
+use crate::types::LoanStatus;
 use soroban_sdk::{
     symbol_short, testutils::Address as _, testutils::Events as _, vec, Address, Env, IntoVal,
 };

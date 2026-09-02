@@ -17,9 +17,31 @@
 //! `06_LEVEL_IMPLEMENTATION_PLAN.md`'s Level 3 "P2P Domain
 //! Foundation"/"Funding Foundation" tasks) that should be their own
 //! reviewed, tested increments, not bundled into this first
-//! contract. `state.rs`'s `LoanStatus`/`LoanRequest` are written so
+//! contract. `types.rs`'s `LoanStatus`/`LoanRequest` are written so
 //! that later work can extend them (e.g. adding a `Funded` status)
 //! without needing to redesign this contract's storage layout.
+//!
+//! # Module layout (L3-P06)
+//!
+//! This crate root only wires together the public entrypoints below;
+//! each responsibility has its own focused module, so future P2P
+//! features have an obvious place to extend rather than growing one
+//! large file:
+//!
+//! - [`error`] — the contract's `Error` codes.
+//! - [`types`] — domain types stored/returned (`LoanRequest`,
+//!   `LoanStatus`).
+//! - [`storage`] — storage keys and the get/set helpers entrypoints
+//!   use instead of touching `env.storage()` directly.
+//! - [`validation`] — the business-rule checks (`amount` positivity,
+//!   ownership, open-status) entrypoints call.
+//! - [`events`] — the two event-publishing calls, one per
+//!   state-changing operation.
+//!
+//! This is purely an internal re-organization (L3-P06): every
+//! entrypoint's signature, storage representation, error, and event
+//! stayed exactly as they were — see each module's own docs for what,
+//! specifically, was moved from where.
 //!
 //! # Public interface
 //!
@@ -54,27 +76,18 @@
 
 #![no_std]
 
-mod state;
+mod error;
+mod events;
+mod storage;
 #[cfg(test)]
 mod test;
+mod types;
+mod validation;
 
-use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, Address, Env};
-use state::{DataKey, LoanRequest, LoanStatus};
+use soroban_sdk::{contract, contractimpl, Address, Env};
 
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum Error {
-    /// `amount` was zero or negative.
-    InvalidAmount = 1,
-    /// No loan request exists with the given id.
-    LoanNotFound = 2,
-    /// The caller is not the loan request's original borrower.
-    NotLoanOwner = 3,
-    /// The loan request is not `Open` (e.g. already cancelled), so
-    /// this operation cannot be performed on it.
-    LoanNotOpen = 4,
-}
+pub use error::Error;
+use types::{LoanRequest, LoanStatus};
 
 #[contract]
 pub struct LoanRegistry;
@@ -88,16 +101,13 @@ impl LoanRegistry {
     /// increment; ids are never reused).
     ///
     /// Emits a `("created", borrower)` event with `(loan_id, amount)`
-    /// as data (L2-P08) — see the module-level docs below for the
+    /// as data (L2-P08) — see the module-level docs above for the
     /// full event contract.
     pub fn create_loan_request(env: Env, borrower: Address, amount: i128) -> Result<u64, Error> {
         borrower.require_auth();
+        validation::validate_amount(amount)?;
 
-        if amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
-
-        let loan_id = Self::next_loan_id(&env);
+        let loan_id = storage::next_loan_id(&env);
 
         // Emitted before the loan is written to storage so that, if
         // storage somehow failed after this point, no event would be
@@ -105,19 +115,14 @@ impl LoanRegistry {
         // the order state changes should be perceived in. `borrower`
         // is cloned here because it is moved into `LoanRequest` right
         // afterward.
-        env.events().publish(
-            (symbol_short!("created"), borrower.clone()),
-            (loan_id, amount),
-        );
+        events::publish_created(&env, borrower.clone(), loan_id, amount);
 
         let loan = LoanRequest {
             borrower,
             amount,
             status: LoanStatus::Open,
         };
-        env.storage()
-            .persistent()
-            .set(&DataKey::Loan(loan_id), &loan);
+        storage::set_loan(&env, loan_id, &loan);
 
         Ok(loan_id)
     }
@@ -130,60 +135,32 @@ impl LoanRegistry {
     /// an address that isn't theirs).
     ///
     /// Emits a `("cancelled", borrower)` event with `loan_id` as data
-    /// (L2-P08) — see the module-level docs below for the full event
+    /// (L2-P08) — see the module-level docs above for the full event
     /// contract.
     pub fn cancel_loan_request(env: Env, borrower: Address, loan_id: u64) -> Result<(), Error> {
         borrower.require_auth();
 
-        let key = DataKey::Loan(loan_id);
-        let mut loan: LoanRequest = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .ok_or(Error::LoanNotFound)?;
+        let mut loan = storage::get_loan(&env, loan_id).ok_or(Error::LoanNotFound)?;
 
-        if loan.borrower != borrower {
-            return Err(Error::NotLoanOwner);
-        }
-        if loan.status != LoanStatus::Open {
-            return Err(Error::LoanNotOpen);
-        }
+        validation::require_owner(&loan, &borrower)?;
+        validation::require_open(&loan)?;
 
         loan.status = LoanStatus::Cancelled;
-        env.storage().persistent().set(&key, &loan);
+        storage::set_loan(&env, loan_id, &loan);
 
-        env.events()
-            .publish((symbol_short!("cancelled"), borrower), loan_id);
+        events::publish_cancelled(&env, borrower, loan_id);
 
         Ok(())
     }
 
     /// Returns the stored loan request for `loan_id`.
     pub fn get_loan_request(env: Env, loan_id: u64) -> Result<LoanRequest, Error> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Loan(loan_id))
-            .ok_or(Error::LoanNotFound)
+        storage::get_loan(&env, loan_id).ok_or(Error::LoanNotFound)
     }
 
     /// Returns the total number of loan requests ever created
     /// (including cancelled ones).
     pub fn get_loan_count(env: Env) -> u64 {
-        env.storage()
-            .instance()
-            .get(&DataKey::LoanCount)
-            .unwrap_or(0)
-    }
-
-    /// Allocates and persists the next sequential loan id.
-    fn next_loan_id(env: &Env) -> u64 {
-        let next: u64 = env
-            .storage()
-            .instance()
-            .get(&DataKey::LoanCount)
-            .unwrap_or(0)
-            + 1;
-        env.storage().instance().set(&DataKey::LoanCount, &next);
-        next
+        storage::loan_count(&env)
     }
 }
