@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["loan_registry", "eligibility_registry"]
+members = ["loan_registry", "eligibility_registry", "reputation_registry"]
 
 [workspace.package]
 edition = "2021"
