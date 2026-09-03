@@ -35,3 +35,11 @@ pub fn require_open(loan: &LoanRequest) -> Result<(), Error> {
     }
     Ok(())
 }
+
+/// `caller` must be this contract's configured admin (L3-P07).
+pub fn require_admin(caller: &Address, stored_admin: &Address) -> Result<(), Error> {
+    if caller != stored_admin {
+        return Err(Error::NotAdmin);
+    }
+    Ok(())
+}

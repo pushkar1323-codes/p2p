@@ -20,7 +20,7 @@
 //! increment-then-persist sequence for `next_loan_id`.
 
 use crate::types::LoanRequest;
-use soroban_sdk::{contracttype, Env};
+use soroban_sdk::{contracttype, Address, Env};
 
 /// Storage keys for this contract's persistent state.
 #[contracttype]
@@ -31,6 +31,14 @@ enum DataKey {
     LoanCount,
     /// Persistent-storage entry for one loan request, keyed by id.
     Loan(u64),
+    /// Instance-storage: this contract's admin address, set once by
+    /// `initialize` (L3-P07). The only address allowed to call
+    /// `set_eligibility_contract`.
+    Admin,
+    /// Instance-storage: the address of the configured eligibility
+    /// dependency contract `create_loan_request` calls before
+    /// persisting a new loan request (L3-P07).
+    EligibilityContract,
 }
 
 /// Returns the total number of loan requests ever created (including
@@ -61,4 +69,29 @@ pub fn next_loan_id(env: &Env) -> u64 {
     let next = loan_count(env) + 1;
     env.storage().instance().set(&DataKey::LoanCount, &next);
     next
+}
+
+/// Reads this contract's configured admin address, if `initialize`
+/// has been called (L3-P07).
+pub fn get_admin(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::Admin)
+}
+
+/// Persists `admin` as this contract's admin address (L3-P07).
+pub fn set_admin(env: &Env, admin: &Address) {
+    env.storage().instance().set(&DataKey::Admin, admin);
+}
+
+/// Reads the configured eligibility dependency contract's address, if
+/// `set_eligibility_contract` has been called (L3-P07).
+pub fn get_eligibility_contract(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::EligibilityContract)
+}
+
+/// Persists `contract_id` as the configured eligibility dependency
+/// contract's address (L3-P07).
+pub fn set_eligibility_contract(env: &Env, contract_id: &Address) {
+    env.storage()
+        .instance()
+        .set(&DataKey::EligibilityContract, contract_id);
 }

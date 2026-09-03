@@ -22,4 +22,20 @@ pub enum Error {
     /// The loan request is not `Open` (e.g. already cancelled), so
     /// this operation cannot be performed on it.
     LoanNotOpen = 4,
+    /// `initialize` was called on a contract that already has an
+    /// admin configured (L3-P07).
+    AlreadyInitialized = 5,
+    /// An admin-only operation (e.g. `set_eligibility_contract`) was
+    /// attempted before `initialize` was ever called (L3-P07).
+    NotInitialized = 6,
+    /// The caller is not this contract's configured admin (L3-P07).
+    NotAdmin = 7,
+    /// `create_loan_request` was called before an eligibility
+    /// dependency contract was configured via
+    /// `set_eligibility_contract` (L3-P07).
+    EligibilityContractNotConfigured = 8,
+    /// The configured eligibility dependency contract rejected the
+    /// borrower — they are not currently eligible to open a loan
+    /// request (L3-P07).
+    BorrowerNotEligible = 9,
 }

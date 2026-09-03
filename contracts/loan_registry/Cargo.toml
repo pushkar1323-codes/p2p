@@ -13,6 +13,12 @@ soroban-sdk = "21.7.7"
 
 [dev-dependencies]
 soroban-sdk = { version = "21.7.7", features = ["testutils"] }
+# Only used by tests (L3-P07), to register and exercise a real deployed
+# instance of the eligibility dependency contract alongside
+# loan_registry — never part of the release WASM build (see
+# src/eligibility.rs's docs for why loan_registry's production code
+# doesn't depend on this crate directly).
+eligibility_registry = { path = "../eligibility_registry" }
 
 [features]
 testutils = ["soroban-sdk/testutils"]

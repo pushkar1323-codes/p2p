@@ -34,29 +34,40 @@
 //! - [`storage`] — storage keys and the get/set helpers entrypoints
 //!   use instead of touching `env.storage()` directly.
 //! - [`validation`] — the business-rule checks (`amount` positivity,
-//!   ownership, open-status) entrypoints call.
+//!   ownership, open-status, admin identity) entrypoints call.
 //! - [`events`] — the two event-publishing calls, one per
 //!   state-changing operation.
+//! - [`eligibility`] — the cross-contract call `create_loan_request`
+//!   makes to the configured eligibility dependency contract
+//!   (L3-P07).
 //!
-//! This is purely an internal re-organization (L3-P06): every
-//! entrypoint's signature, storage representation, error, and event
-//! stayed exactly as they were — see each module's own docs for what,
-//! specifically, was moved from where.
+//! Module organization was purely internal (no behavior change) as of
+//! L3-P06; L3-P07 is the first change since then that alters observed
+//! behavior — see below.
 //!
 //! # Public interface
 //!
-//! - `create_loan_request(borrower, amount) -> u64` — creates a new
-//!   `Open` loan request owned by `borrower`, returns its id.
+//! - `create_loan_request(borrower, amount) -> u64` — calls the
+//!   configured eligibility dependency contract, then (if approved)
+//!   creates a new `Open` loan request owned by `borrower`, returns
+//!   its id (L3-P07 added the eligibility call; the signature and the
+//!   rest of the behavior are unchanged from L2-P03).
 //! - `cancel_loan_request(borrower, loan_id)` — cancels an `Open`
 //!   loan request; only the original borrower may do this.
 //! - `get_loan_request(loan_id) -> LoanRequest` — reads a stored loan
 //!   request.
 //! - `get_loan_count() -> u64` — total number of loan requests ever
 //!   created.
+//! - `initialize(admin)` — one-time bootstrap; sets this contract's
+//!   admin (L3-P07).
+//! - `set_eligibility_contract(admin, contract_id)` — admin-only;
+//!   configures which deployed contract `create_loan_request` calls
+//!   for the eligibility check (L3-P07).
 //!
-//! All four are intentionally small and explicit, per L2-P03's scope
-//! — no admin/config functions, no batch operations, nothing added
-//! "because it might be useful later."
+//! The two L3-P07 admin entrypoints exist only to support the
+//! cross-contract call `create_loan_request` now makes — see
+//! `eligibility.rs`'s docs for why the dependency itself is
+//! deliberately minimal.
 //!
 //! # Events (L2-P08)
 //!
@@ -76,6 +87,7 @@
 
 #![no_std]
 
+mod eligibility;
 mod error;
 mod events;
 mod storage;
@@ -106,6 +118,17 @@ impl LoanRegistry {
     pub fn create_loan_request(env: Env, borrower: Address, amount: i128) -> Result<u64, Error> {
         borrower.require_auth();
         validation::validate_amount(amount)?;
+
+        // The one contract-to-contract call this contract makes
+        // (L3-P07): the configured eligibility dependency is asked
+        // whether `borrower` may open a loan request, *before*
+        // anything is persisted. If no dependency is configured, or
+        // the dependency rejects the borrower, this returns `Err`
+        // here and nothing below runs — no loan id is allocated, no
+        // event is published, and the loan count does not change.
+        let eligibility_contract = storage::get_eligibility_contract(&env)
+            .ok_or(Error::EligibilityContractNotConfigured)?;
+        eligibility::require_eligible(&env, &eligibility_contract, &borrower)?;
 
         let loan_id = storage::next_loan_id(&env);
 
@@ -162,5 +185,40 @@ impl LoanRegistry {
     /// (including cancelled ones).
     pub fn get_loan_count(env: Env) -> u64 {
         storage::loan_count(&env)
+    }
+
+    /// One-time bootstrap: sets `admin` as this contract's admin, the
+    /// only address later allowed to call `set_eligibility_contract`
+    /// (L3-P07). Requires `admin`'s authorization. Fails with
+    /// `Error::AlreadyInitialized` if an admin is already configured.
+    pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
+        admin.require_auth();
+
+        if storage::get_admin(&env).is_some() {
+            return Err(Error::AlreadyInitialized);
+        }
+
+        storage::set_admin(&env, &admin);
+        Ok(())
+    }
+
+    /// Configures the eligibility dependency contract
+    /// `create_loan_request` calls before persisting a new loan
+    /// request (L3-P07). Requires `admin`'s authorization, and
+    /// `admin` must be this contract's configured admin
+    /// (`Error::NotAdmin` otherwise; `Error::NotInitialized` if
+    /// `initialize` was never called).
+    pub fn set_eligibility_contract(
+        env: Env,
+        admin: Address,
+        contract_id: Address,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+
+        let stored_admin = storage::get_admin(&env).ok_or(Error::NotInitialized)?;
+        validation::require_admin(&admin, &stored_admin)?;
+
+        storage::set_eligibility_contract(&env, &contract_id);
+        Ok(())
     }
 }
