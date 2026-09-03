@@ -2,15 +2,20 @@
 //!
 //! Split out of the former `state.rs` (L3-P06) into just the domain
 //! shapes — storage keys and access now live in `storage.rs` instead.
-//! `LoanRequest`/`LoanStatus` themselves, their fields, and their
-//! `#[contracttype]` derives are unchanged from the original, so the
-//! stored/returned representation is byte-for-byte compatible.
 //!
-//! `LoanStatus` deliberately still has only the two states this
-//! contract manages (`Open`, `Cancelled`); adding states like
-//! `Funded`, `Repaid`, or `Defaulted` is left to future funding/
-//! lending contract work, which is out of scope for this refactor
-//! (see `00_MASTER_RULES.md` §18 / this task's own restrictions).
+//! `LoanStatus` (L3-P08) now names the full P2P lending domain state
+//! machine this contract is the foundation for — `Open`, `Cancelled`,
+//! `Funded`, `Repaying`, `Repaid`, `Defaulted` — but this contract
+//! only ever produces `Open` and `Cancelled` values: the other four
+//! variants exist purely as type representation so the future
+//! funding/repayment contract work
+//! (`06_LEVEL_IMPLEMENTATION_PLAN.md`'s Level 3/4 P2P features) has a
+//! shared vocabulary to extend into, without any later migration of
+//! already-stored `LoanStatus` values. No code path in this crate
+//! constructs, matches on, or transitions into any of the four
+//! inactive variants — see `validation.rs`'s `require_transition` for
+//! the single, explicit place the currently-supported transition
+//! (`Open -> Cancelled`) is enforced.
 
 use soroban_sdk::{contracttype, Address};
 
@@ -33,12 +38,32 @@ pub struct LoanRequest {
     pub status: LoanStatus,
 }
 
+/// The full P2P lending loan domain state machine (L3-P08). Only
+/// `Open` and `Cancelled` are reachable through this contract's
+/// current entrypoints — see the module-level docs above.
 #[contracttype]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // Funded/Repaying/Repaid/Defaulted: type representation only, not yet reachable — see module docs.
 pub enum LoanStatus {
     /// Awaiting funding. The only status a newly created loan
     /// request can have.
     Open,
     /// Withdrawn by the borrower before being funded.
     Cancelled,
+    /// A lender has funded the loan. No code path in this contract
+    /// currently produces this state — reserved for the future
+    /// funding contract work.
+    Funded,
+    /// The borrower is actively repaying a funded loan. No code path
+    /// in this contract currently produces this state — reserved for
+    /// the future repayment contract work.
+    Repaying,
+    /// The loan has been fully repaid. No code path in this contract
+    /// currently produces this state — reserved for the future
+    /// repayment contract work.
+    Repaid,
+    /// The borrower failed to meet repayment obligations. No code
+    /// path in this contract currently produces this state — reserved
+    /// for the future default/liquidation contract work.
+    Defaulted,
 }

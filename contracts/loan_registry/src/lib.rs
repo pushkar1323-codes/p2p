@@ -34,7 +34,9 @@
 //! - [`storage`] — storage keys and the get/set helpers entrypoints
 //!   use instead of touching `env.storage()` directly.
 //! - [`validation`] — the business-rule checks (`amount` positivity,
-//!   ownership, open-status, admin identity) entrypoints call.
+//!   ownership, admin identity) entrypoints call, plus the loan
+//!   domain's centralized state-transition rule,
+//!   `require_transition` (L3-P08).
 //! - [`events`] — the two event-publishing calls, one per
 //!   state-changing operation.
 //! - [`eligibility`] — the cross-contract call `create_loan_request`
@@ -68,6 +70,27 @@
 //! cross-contract call `create_loan_request` now makes — see
 //! `eligibility.rs`'s docs for why the dependency itself is
 //! deliberately minimal.
+//!
+//! # Domain state machine (L3-P08)
+//!
+//! `types.rs`'s `LoanStatus` names the full future P2P lending domain
+//! state machine (`Open`, `Cancelled`, `Funded`, `Repaying`,
+//! `Repaid`, `Defaulted`), but this contract's entrypoints only ever
+//! produce/accept two of those states and one transition:
+//!
+//! ```text
+//! create_loan_request  ──eligible──▶  Open  ──cancel_loan_request──▶  Cancelled
+//! ```
+//!
+//! `validation::require_transition` is the single place that
+//! transition table is enforced: `Open -> Cancelled` is the only
+//! valid transition; every other pair (including `Cancelled ->
+//! Cancelled`, and any transition into `Funded`/`Repaying`/
+//! `Repaid`/`Defaulted`, none of which this contract's entrypoints
+//! ever attempt) is rejected. Funding, repayment, and default
+//! handling — the transitions that would actually reach those four
+//! remaining states — are future, separately reviewed increments;
+//! see `06_LEVEL_IMPLEMENTATION_PLAN.md`.
 //!
 //! # Events (L2-P08)
 //!
@@ -166,7 +189,7 @@ impl LoanRegistry {
         let mut loan = storage::get_loan(&env, loan_id).ok_or(Error::LoanNotFound)?;
 
         validation::require_owner(&loan, &borrower)?;
-        validation::require_open(&loan)?;
+        validation::require_transition(loan.status, LoanStatus::Cancelled)?;
 
         loan.status = LoanStatus::Cancelled;
         storage::set_loan(&env, loan_id, &loan);
