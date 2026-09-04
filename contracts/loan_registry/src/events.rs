@@ -20,3 +20,38 @@ pub fn publish_cancelled(env: &Env, borrower: Address, loan_id: u64) {
     env.events()
         .publish((symbol_short!("cancelled"), borrower), loan_id);
 }
+
+/// Publishes the `("coll_lock", borrower)` topics / `(loan_id, token,
+/// amount)` data event when collateral is successfully locked
+/// (L3-P11). The symbol is abbreviated to `coll_lock` (9 characters)
+/// to fit `symbol_short!`'s limit, following this file's existing
+/// `created`/`cancelled` short-symbol convention.
+pub fn publish_collateral_locked(
+    env: &Env,
+    borrower: Address,
+    loan_id: u64,
+    token: Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("coll_lock"), borrower),
+        (loan_id, token, amount),
+    );
+}
+
+/// Publishes the `("coll_rel", borrower)` topics / `(loan_id, token,
+/// amount)` data event when locked collateral is released back to the
+/// borrower (L3-P11) — currently only ever as part of
+/// `cancel_loan_request`; see `collateral.rs`.
+pub fn publish_collateral_released(
+    env: &Env,
+    borrower: Address,
+    loan_id: u64,
+    token: Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("coll_rel"), borrower),
+        (loan_id, token, amount),
+    );
+}

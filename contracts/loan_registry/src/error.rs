@@ -38,4 +38,10 @@ pub enum Error {
     /// borrower — they are not currently eligible to open a loan
     /// request (L3-P07).
     BorrowerNotEligible = 9,
+    /// `lock_collateral` was called for a loan that already has a
+    /// `Locked` collateral record (L3-P11). Prevents double-locking.
+    CollateralAlreadyLocked = 10,
+    /// `get_collateral` was called for a loan that has never had
+    /// collateral locked against it (L3-P11).
+    CollateralNotFound = 11,
 }

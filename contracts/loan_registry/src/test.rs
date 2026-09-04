@@ -1,10 +1,14 @@
 #![cfg(test)]
 
 use super::{Error, LoanRegistry, LoanRegistryClient};
-use crate::types::LoanStatus;
+use crate::types::{CollateralStatus, LoanStatus};
 use eligibility_registry::{EligibilityRegistry, EligibilityRegistryClient};
 use soroban_sdk::{
-    symbol_short, testutils::Address as _, testutils::Events as _, vec, Address, Env, IntoVal,
+    symbol_short,
+    testutils::Address as _,
+    testutils::Events as _,
+    token::{StellarAssetClient, TokenClient},
+    vec, Address, Env, IntoVal,
 };
 
 /// Registers a fresh `LoanRegistry`, wired up (L3-P07) with a
@@ -375,4 +379,276 @@ fn loan_registry_and_eligibility_registry_integrate_end_to_end() {
     let second_attempt = loan_registry_client.try_create_loan_request(&borrower, &1_000i128);
     assert_eq!(second_attempt, Err(Ok(Error::BorrowerNotEligible)));
     assert_eq!(loan_registry_client.get_loan_count(), 1);
+}
+
+// --- L3-P11: collateral locking -----------------------------------
+
+/// Builds on `setup()` and additionally registers a real Stellar
+/// Asset Contract (via the SDK's test-only
+/// `register_stellar_asset_contract_v2`) as a collateral token, with
+/// `initial_balance` already minted to `borrower`. This is a genuine
+/// SEP-41 token contract, not a mock — `lock_collateral`'s real
+/// `token::Client::transfer` call runs against it exactly as it would
+/// against any real Stellar Asset Contract or custom token on-chain,
+/// so balance assertions below reflect an actual token movement.
+fn setup_with_token(initial_balance: i128) -> (Env, LoanRegistryClient<'static>, Address, Address) {
+    let (env, client, borrower) = setup();
+
+    let token_admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(token_admin);
+    let token = sac.address();
+    StellarAssetClient::new(&env, &token).mint(&borrower, &initial_balance);
+
+    (env, client, borrower, token)
+}
+
+#[test]
+fn locking_collateral_transfers_tokens_into_escrow_and_stores_a_locked_record() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&borrower), 400);
+    assert_eq!(token_client.balance(&client.address), 600);
+
+    let collateral = client.get_collateral(&loan_id);
+    assert_eq!(collateral.loan_id, loan_id);
+    assert_eq!(collateral.borrower, borrower);
+    assert_eq!(collateral.token, token);
+    assert_eq!(collateral.amount, 600);
+    assert_eq!(collateral.status, CollateralStatus::Locked);
+}
+
+#[test]
+fn locking_collateral_for_a_nonexistent_loan_fails() {
+    let (_env, client, borrower, token) = setup_with_token(1_000i128);
+
+    let result = client.try_lock_collateral(&borrower, &999u64, &token, &500i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotFound)));
+
+    let missing = client.try_get_collateral(&999u64);
+    assert_eq!(missing, Err(Ok(Error::CollateralNotFound)));
+}
+
+#[test]
+fn locking_collateral_for_a_non_open_loan_fails() {
+    let (_env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.cancel_loan_request(&borrower, &loan_id);
+
+    let result = client.try_lock_collateral(&borrower, &loan_id, &token, &500i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotOpen)));
+
+    // The rejected attempt must not have created a collateral record.
+    let missing = client.try_get_collateral(&loan_id);
+    assert_eq!(missing, Err(Ok(Error::CollateralNotFound)));
+}
+
+#[test]
+fn a_stranger_cannot_lock_collateral_on_someone_elses_loan() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    let stranger = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&stranger, &1_000i128);
+
+    let result = client.try_lock_collateral(&stranger, &loan_id, &token, &500i128);
+    assert_eq!(result, Err(Ok(Error::NotLoanOwner)));
+
+    // Neither address's balance may have moved, and no collateral
+    // record may exist, after a rejected attempt.
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&stranger), 1_000);
+    assert_eq!(token_client.balance(&client.address), 0);
+    let missing = client.try_get_collateral(&loan_id);
+    assert_eq!(missing, Err(Ok(Error::CollateralNotFound)));
+}
+
+#[test]
+fn locking_zero_amount_collateral_fails() {
+    let (_env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_lock_collateral(&borrower, &loan_id, &token, &0i128);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn locking_negative_amount_collateral_fails() {
+    let (_env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_lock_collateral(&borrower, &loan_id, &token, &-100i128);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn locking_collateral_twice_for_the_same_loan_fails() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &400i128);
+
+    let result = client.try_lock_collateral(&borrower, &loan_id, &token, &200i128);
+    assert_eq!(result, Err(Ok(Error::CollateralAlreadyLocked)));
+
+    // The original lock must be completely unaffected by the
+    // rejected second attempt — same amount, same balances.
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&borrower), 600);
+    assert_eq!(token_client.balance(&client.address), 400);
+    let collateral = client.get_collateral(&loan_id);
+    assert_eq!(collateral.amount, 400);
+    assert_eq!(collateral.status, CollateralStatus::Locked);
+}
+
+#[test]
+#[should_panic]
+fn locking_collateral_with_insufficient_token_balance_panics() {
+    let (_env, client, borrower, token) = setup_with_token(100i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    // The token contract itself (not loan_registry) rejects this —
+    // panicking, per SEP-41's `transfer`, rather than returning a
+    // `Result` — so this is asserted with `#[should_panic]` rather
+    // than a `try_*` call. See `collateral.rs`'s "Atomicity" docs for
+    // why a panic here can never leave partial state.
+    client.lock_collateral(&borrower, &loan_id, &token, &500i128);
+}
+
+#[test]
+fn locking_collateral_emits_a_locked_event_with_loan_id_token_and_amount() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+
+    // The token contract's own `mint` (setup) and `transfer` (the
+    // lock itself) also emit events into the same `Env`, so this
+    // filters down to just `loan_registry`'s own events by contract
+    // address rather than assuming an absolute count/position.
+    let last_event = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(id, _, _)| *id == client.address)
+        .last()
+        .unwrap();
+    assert_eq!(
+        vec![&env, last_event],
+        vec![
+            &env,
+            (
+                client.address.clone(),
+                (symbol_short!("coll_lock"), borrower.clone()).into_val(&env),
+                (loan_id, token.clone(), 600i128).into_val(&env),
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_failed_lock_collateral_call_does_not_emit_an_event() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &400i128);
+    let events_before = env.events().all().len();
+
+    let _ = client.try_lock_collateral(&borrower, &loan_id, &token, &100i128);
+
+    // The rejected double-lock attempt must not add any event.
+    assert_eq!(env.events().all().len(), events_before);
+}
+
+#[test]
+fn cancelling_a_loan_with_locked_collateral_releases_it_back_to_the_borrower() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+
+    client.cancel_loan_request(&borrower, &loan_id);
+
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&borrower), 1_000);
+    assert_eq!(token_client.balance(&client.address), 0);
+
+    let collateral = client.get_collateral(&loan_id);
+    assert_eq!(collateral.status, CollateralStatus::Released);
+    assert_eq!(collateral.amount, 600);
+}
+
+#[test]
+fn cancelling_a_loan_with_locked_collateral_emits_a_released_event() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+
+    client.cancel_loan_request(&borrower, &loan_id);
+
+    // Same filtering rationale as the lock-event test above: only
+    // `loan_registry`'s own events, by contract address, not the
+    // token contract's `mint`/`transfer` events also present in the
+    // same `Env`.
+    let last_event = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(id, _, _)| *id == client.address)
+        .last()
+        .unwrap();
+    assert_eq!(
+        vec![&env, last_event],
+        vec![
+            &env,
+            (
+                client.address.clone(),
+                (symbol_short!("coll_rel"), borrower.clone()).into_val(&env),
+                (loan_id, token.clone(), 600i128).into_val(&env),
+            ),
+        ]
+    );
+}
+
+#[test]
+fn cancelling_a_loan_with_no_collateral_does_not_emit_a_release_event() {
+    let (env, client, borrower) = setup();
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    client.cancel_loan_request(&borrower, &loan_id);
+
+    // Only `created` and `cancelled` — no `coll_rel`, since this loan
+    // never had collateral locked. `release_if_locked` is a no-op.
+    let events = env.events().all();
+    assert_eq!(events.len(), 2);
+    let missing = client.try_get_collateral(&loan_id);
+    assert_eq!(missing, Err(Ok(Error::CollateralNotFound)));
+}
+
+#[test]
+fn locking_collateral_again_after_a_release_via_cancellation_fails() {
+    let (_env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+    client.cancel_loan_request(&borrower, &loan_id);
+
+    // The loan is `Cancelled` now, so this is rejected the same way
+    // any lock on a non-`Open` loan is — not a new/special error path
+    // — but it is asserted explicitly here as the invalid
+    // `Released -> Locked` transition L3-P11's test plan calls for.
+    let result = client.try_lock_collateral(&borrower, &loan_id, &token, &100i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotOpen)));
+
+    // The already-released collateral record must be unaffected.
+    let collateral = client.get_collateral(&loan_id);
+    assert_eq!(collateral.status, CollateralStatus::Released);
+    assert_eq!(collateral.amount, 600);
+}
+
+#[test]
+fn reading_collateral_for_a_loan_that_never_had_any_fails() {
+    let (_env, client, borrower) = setup();
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_get_collateral(&loan_id);
+    assert_eq!(result, Err(Ok(Error::CollateralNotFound)));
 }

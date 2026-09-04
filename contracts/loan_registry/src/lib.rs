@@ -12,14 +12,16 @@
 //! ownership.
 //!
 //! It deliberately does NOT implement lender funding, interest,
-//! repayment, collateral, or any token/asset transfer — those are
-//! separate, larger pieces of functionality (see
-//! `06_LEVEL_IMPLEMENTATION_PLAN.md`'s Level 3 "P2P Domain
-//! Foundation"/"Funding Foundation" tasks) that should be their own
-//! reviewed, tested increments, not bundled into this first
+//! repayment, or default handling — those are separate, larger pieces
+//! of functionality (see `06_LEVEL_IMPLEMENTATION_PLAN.md`'s Level 3
+//! "P2P Domain Foundation"/"Funding Foundation" tasks) that should be
+//! their own reviewed, tested increments, not bundled into this first
 //! contract. `types.rs`'s `LoanStatus`/`LoanRequest` are written so
 //! that later work can extend them (e.g. adding a `Funded` status)
 //! without needing to redesign this contract's storage layout.
+//! Collateral *locking* (L3-P11) is the one exception implemented so
+//! far — see `collateral.rs` and "Collateral" below for why it is
+//! safe to add ahead of funding/repayment.
 //!
 //! # Module layout (L3-P06)
 //!
@@ -42,6 +44,9 @@
 //! - [`eligibility`] — the cross-contract call `create_loan_request`
 //!   makes to the configured eligibility dependency contract
 //!   (L3-P07).
+//! - [`collateral`] — the collateral lock/release logic and real
+//!   SEP-41 token transfers `lock_collateral`/`cancel_loan_request`
+//!   use (L3-P11).
 //!
 //! Module organization was purely internal (no behavior change) as of
 //! L3-P06; L3-P07 is the first change since then that alters observed
@@ -65,11 +70,28 @@
 //! - `set_eligibility_contract(admin, contract_id)` — admin-only;
 //!   configures which deployed contract `create_loan_request` calls
 //!   for the eligibility check (L3-P07).
+//! - `lock_collateral(borrower, loan_id, token, amount)` — locks real
+//!   SEP-41 `token` collateral for an `Open` loan `borrower` owns
+//!   (L3-P11).
+//! - `get_collateral(loan_id) -> Collateral` — reads a stored
+//!   collateral record (L3-P11).
 //!
 //! The two L3-P07 admin entrypoints exist only to support the
 //! cross-contract call `create_loan_request` now makes — see
 //! `eligibility.rs`'s docs for why the dependency itself is
 //! deliberately minimal.
+//!
+//! # Collateral (L3-P11)
+//!
+//! `lock_collateral` locks a real, transferred token balance — not a
+//! stored flag — as collateral for one `Open` loan; the tokens move
+//! from the borrower into this contract itself, which acts as the
+//! escrow. `cancel_loan_request` now also releases that collateral
+//! (if any was locked) back to the borrower as part of cancelling the
+//! loan — the only lifecycle point currently safe enough to trigger a
+//! release; there is no standalone release entrypoint. Valuation,
+//! price feeds, oracles, and liquidation are explicitly out of scope
+//! — see `collateral.rs`'s module docs for the full rationale.
 //!
 //! # Domain state machine (L3-P08)
 //!
@@ -100,16 +122,21 @@
 //! |------------------------|----------------------------------|----------------------|
 //! | `create_loan_request`  | `(Symbol("created"), borrower)`  | `(loan_id, amount)`  |
 //! | `cancel_loan_request`  | `(Symbol("cancelled"), borrower)`| `loan_id`            |
+//! | `lock_collateral`      | `(Symbol("coll_lock"), borrower)`| `(loan_id, token, amount)` |
+//! | `cancel_loan_request` (collateral release, if any was locked) | `(Symbol("coll_rel"), borrower)` | `(loan_id, token, amount)` |
 //!
 //! The event name is the first topic (following the common Soroban
 //! convention, e.g. token contracts' `transfer`/`mint` events) and
 //! the borrower's address is the second topic, so a caller can filter
-//! `getEvents` by a specific borrower if useful later. `get_loan_count`
-//! and `get_loan_request` are reads and do not emit events — only the
-//! two operations that actually change state do.
+//! `getEvents` by a specific borrower if useful later. `get_loan_count`,
+//! `get_loan_request`, and `get_collateral` are reads and do not emit
+//! events — only state-changing operations do. The `coll_lock`/
+//! `coll_rel` symbols are abbreviated to fit `symbol_short!`'s
+//! 9-character limit (L3-P11) — see `events.rs`.
 
 #![no_std]
 
+mod collateral;
 mod eligibility;
 mod error;
 mod events;
@@ -122,7 +149,7 @@ mod validation;
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 pub use error::Error;
-use types::{LoanRequest, LoanStatus};
+use types::{Collateral, LoanRequest, LoanStatus};
 
 #[contract]
 pub struct LoanRegistry;
@@ -183,6 +210,12 @@ impl LoanRegistry {
     /// Emits a `("cancelled", borrower)` event with `loan_id` as data
     /// (L2-P08) — see the module-level docs above for the full event
     /// contract.
+    ///
+    /// If `loan_id` currently has `Locked` collateral, that collateral
+    /// is also released back to the borrower as part of this same
+    /// call (L3-P11) — see `collateral.rs` for why cancellation is the
+    /// only supported release trigger. This is a no-op for the (most
+    /// common) case where the loan never had collateral locked.
     pub fn cancel_loan_request(env: Env, borrower: Address, loan_id: u64) -> Result<(), Error> {
         borrower.require_auth();
 
@@ -196,12 +229,46 @@ impl LoanRegistry {
 
         events::publish_cancelled(&env, borrower, loan_id);
 
+        collateral::release_if_locked(&env, loan_id);
+
         Ok(())
     }
 
     /// Returns the stored loan request for `loan_id`.
     pub fn get_loan_request(env: Env, loan_id: u64) -> Result<LoanRequest, Error> {
         storage::get_loan(&env, loan_id).ok_or(Error::LoanNotFound)
+    }
+
+    /// Locks `amount` of `token` as collateral for `loan_id`,
+    /// transferring it from `borrower` into this contract (L3-P11).
+    /// Requires `borrower`'s authorization, `borrower` must be
+    /// `loan_id`'s owner, the loan must currently be `Open`, `amount`
+    /// must be positive, and the loan must not already have `Locked`
+    /// collateral. See `collateral.rs` for the full mechanism and
+    /// atomicity guarantees.
+    ///
+    /// Emits a `("coll_lock", borrower)` event with `(loan_id, token,
+    /// amount)` as data — see the module-level docs above for the
+    /// full event contract.
+    pub fn lock_collateral(
+        env: Env,
+        borrower: Address,
+        loan_id: u64,
+        token: Address,
+        amount: i128,
+    ) -> Result<(), Error> {
+        borrower.require_auth();
+
+        let loan = storage::get_loan(&env, loan_id).ok_or(Error::LoanNotFound)?;
+
+        collateral::lock(&env, &loan, loan_id, &borrower, &token, amount)
+    }
+
+    /// Returns the stored collateral record for `loan_id` (L3-P11).
+    /// Fails with `Error::CollateralNotFound` if no collateral has
+    /// ever been locked for it.
+    pub fn get_collateral(env: Env, loan_id: u64) -> Result<Collateral, Error> {
+        storage::get_collateral(&env, loan_id).ok_or(Error::CollateralNotFound)
     }
 
     /// Returns the total number of loan requests ever created

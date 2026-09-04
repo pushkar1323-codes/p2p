@@ -19,7 +19,7 @@
 //! persistent storage choice per key, same default-to-zero read, same
 //! increment-then-persist sequence for `next_loan_id`.
 
-use crate::types::LoanRequest;
+use crate::types::{Collateral, LoanRequest};
 use soroban_sdk::{contracttype, Address, Env};
 
 /// Storage keys for this contract's persistent state.
@@ -39,6 +39,10 @@ enum DataKey {
     /// dependency contract `create_loan_request` calls before
     /// persisting a new loan request (L3-P07).
     EligibilityContract,
+    /// Persistent-storage entry for one loan's collateral record,
+    /// keyed by loan id (L3-P11). Absent if no collateral has ever
+    /// been locked for that loan.
+    Collateral(u64),
 }
 
 /// Returns the total number of loan requests ever created (including
@@ -94,4 +98,21 @@ pub fn set_eligibility_contract(env: &Env, contract_id: &Address) {
     env.storage()
         .instance()
         .set(&DataKey::EligibilityContract, contract_id);
+}
+
+/// Reads the stored collateral record for `loan_id`, if any collateral
+/// has ever been locked for it (whether currently `Locked` or already
+/// `Released`) (L3-P11).
+pub fn get_collateral(env: &Env, loan_id: u64) -> Option<Collateral> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Collateral(loan_id))
+}
+
+/// Writes (creating or overwriting) the collateral record stored at
+/// `loan_id` (L3-P11).
+pub fn set_collateral(env: &Env, loan_id: u64, collateral: &Collateral) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Collateral(loan_id), collateral);
 }

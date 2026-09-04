@@ -67,3 +67,46 @@ pub enum LoanStatus {
     /// for the future default/liquidation contract work.
     Defaulted,
 }
+
+/// The state of one loan's optional locked collateral (L3-P11).
+/// Deliberately just `None -> Locked -> Released`: no partial-lock,
+/// top-up, or liquidation states — those depend on funding/valuation
+/// work this contract does not implement yet (see `collateral.rs`).
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // `None` is never constructed — a loan with no collateral simply has no `Collateral` record at all (`storage::get_collateral` returns `Option::None`). It exists here only to name the starting point of the lifecycle.
+pub enum CollateralStatus {
+    /// No collateral has ever been locked for the loan. Not actually
+    /// stored — see the variant doc above.
+    None,
+    /// Tokens have been transferred into this contract and are held
+    /// in escrow on the borrower's behalf.
+    Locked,
+    /// Tokens have been transferred back to the borrower. Currently
+    /// only reachable via `cancel_loan_request` — see `collateral.rs`.
+    Released,
+}
+
+/// A record of collateral locked (and, later, released) for one loan
+/// request (L3-P11). Deliberately minimal — asset and amount only.
+/// No price, valuation, USD amount, or collateral-to-loan ratio is
+/// stored or computed here; that is explicitly out of scope for this
+/// task (see `collateral.rs`'s module docs).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Collateral {
+    /// The loan request this collateral secures.
+    pub loan_id: u64,
+    /// The address that locked the collateral. Always equal to the
+    /// loan's own `borrower` — `collateral::lock` enforces this via
+    /// `validation::require_owner` before any tokens move.
+    pub borrower: Address,
+    /// The token contract address of the locked asset. Any SEP-41-
+    /// compatible token (including a Stellar Asset Contract) is
+    /// accepted; this contract does not restrict which asset may be
+    /// used as collateral.
+    pub token: Address,
+    /// The amount of `token` locked, in its smallest unit.
+    pub amount: i128,
+    pub status: CollateralStatus,
+}

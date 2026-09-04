@@ -9,7 +9,7 @@
 //! loan domain's state machine — see its own docs below.
 
 use crate::error::Error;
-use crate::types::{LoanRequest, LoanStatus};
+use crate::types::{Collateral, CollateralStatus, LoanRequest, LoanStatus};
 use soroban_sdk::Address;
 
 /// `amount` must be strictly positive.
@@ -54,6 +54,34 @@ pub fn require_transition(current: LoanStatus, target: LoanStatus) -> Result<(),
 pub fn require_admin(caller: &Address, stored_admin: &Address) -> Result<(), Error> {
     if caller != stored_admin {
         return Err(Error::NotAdmin);
+    }
+    Ok(())
+}
+
+/// `loan` must currently be `Open` (L3-P11). Used by
+/// `collateral::lock`, which does not itself transition the loan's
+/// status — only `cancel_loan_request` does that, via
+/// `require_transition` above. Reuses `Error::LoanNotOpen`: from the
+/// caller's point of view "this loan isn't open" is the same
+/// condition either way, so a separate error variant would only
+/// duplicate meaning.
+pub fn require_loan_open(loan: &LoanRequest) -> Result<(), Error> {
+    if loan.status != LoanStatus::Open {
+        return Err(Error::LoanNotOpen);
+    }
+    Ok(())
+}
+
+/// Rejects locking new collateral for a loan that already has a
+/// `Locked` collateral record (L3-P11) — prevents double-locking.
+/// `existing` is whatever `storage::get_collateral` currently returns
+/// for the loan: `None` (nothing ever locked) and `Some` with status
+/// `Released` are both fine to lock over; only `Locked` is rejected.
+pub fn require_not_already_locked(existing: Option<&Collateral>) -> Result<(), Error> {
+    if let Some(collateral) = existing {
+        if collateral.status == CollateralStatus::Locked {
+            return Err(Error::CollateralAlreadyLocked);
+        }
     }
     Ok(())
 }
