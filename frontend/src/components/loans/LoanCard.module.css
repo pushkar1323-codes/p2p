@@ -1,0 +1,86 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p2p-space-3);
+  padding: var(--p2p-space-5);
+  border-radius: var(--p2p-radius-lg);
+  border: 1px solid var(--p2p-border);
+  background: var(--p2p-surface);
+  box-shadow: var(--p2p-shadow-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.card:hover {
+  border-color: var(--p2p-purple-500);
+  box-shadow: var(--p2p-shadow-md);
+}
+
+.card:focus-visible {
+  outline: none;
+  border-color: var(--p2p-purple-500);
+  box-shadow: 0 0 0 3px var(--p2p-purple-50);
+}
+
+.card:active {
+  transform: translateY(1px);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--p2p-space-2);
+}
+
+.loanId {
+  font-size: var(--p2p-text-base);
+  font-weight: 700;
+  color: var(--p2p-text-primary);
+  font-family: var(--font-geist-mono);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--p2p-space-2);
+}
+
+.label {
+  font-size: var(--p2p-text-xs);
+  color: var(--p2p-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.value {
+  font-size: var(--p2p-text-sm);
+  color: var(--p2p-text-secondary);
+  font-family: var(--font-geist-mono);
+}
+
+.amount {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: var(--p2p-text-md);
+  font-weight: 700;
+  color: var(--p2p-text-primary);
+  font-family: var(--font-geist-mono);
+}
+
+.unit {
+  font-family: var(--font-geist-sans);
+  font-size: var(--p2p-text-xs);
+  font-weight: 500;
+  color: var(--p2p-text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}

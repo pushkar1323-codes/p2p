@@ -187,6 +187,13 @@ test("isContractWriteError recognizes a well-formed ContractWriteError", () => {
   );
 });
 
+test("isContractWriteError recognizes INVALID_LOAN_ID (FCP-02 cancel validation)", () => {
+  assert.equal(
+    isContractWriteError({ code: "INVALID_LOAN_ID", message: "Enter a whole number loan ID (0 or greater)." }),
+    true
+  );
+});
+
 test("isContractWriteError rejects plain Errors, LoanRegistryError-shaped objects, and other values", () => {
   assert.equal(isContractWriteError(new Error("boom")), false);
   // LOAN_NOT_FOUND is a valid LoanRegistryError code, but not a valid

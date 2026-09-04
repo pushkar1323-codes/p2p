@@ -64,14 +64,14 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (pending) return;
-    await createLoanRequest(amount);
+    await createLoanRequest(amount.trim());
     onSuccess?.();
   }
 
   async function handleCancel(e: React.FormEvent) {
     e.preventDefault();
     if (pending) return;
-    const id = Number(cancelLoanId);
+    const id = Number(cancelLoanId.trim());
     await cancelLoanRequest(id);
     onSuccess?.();
   }

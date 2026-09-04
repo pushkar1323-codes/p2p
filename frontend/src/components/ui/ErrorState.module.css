@@ -1,0 +1,20 @@
+.container {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--p2p-space-3);
+  padding: var(--p2p-space-5);
+  border-radius: var(--p2p-radius-md);
+  background: var(--p2p-red-50);
+  color: var(--p2p-red-600);
+}
+
+.message {
+  flex: 1;
+  font-size: var(--p2p-text-sm);
+  line-height: 1.5;
+  padding-top: 1px;
+}
+
+.action {
+  flex-shrink: 0;
+}

@@ -191,6 +191,34 @@ export function MonitorIcon(props: IconProps) {
   );
 }
 
+export function ListIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="4" cy="5.5" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="10" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="14.5" r="1.1" fill="currentColor" stroke="none" />
+      <path d="M7.5 5.5h9M7.5 10h9M7.5 14.5h6" />
+    </svg>
+  );
+}
+
+export function UserIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="10" cy="7" r="3.3" />
+      <path d="M3.8 17c0.7-3.4 3.4-5.4 6.2-5.4s5.5 2 6.2 5.4" />
+    </svg>
+  );
+}
+
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M16 10H4M4 10l5-5M4 10l5 5" />
+    </svg>
+  );
+}
+
 /** The P2P brand mark: two linked nodes, echoing "peer to peer". */
 export function P2PMark(props: IconProps) {
   return (

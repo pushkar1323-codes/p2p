@@ -67,6 +67,11 @@ const INVALID_AMOUNT_ERROR: ContractWriteError = {
   message: "Enter a whole number amount greater than zero.",
 };
 
+const INVALID_LOAN_ID_ERROR: ContractWriteError = {
+  code: "INVALID_LOAN_ID",
+  message: "Enter a whole number loan ID (0 or greater).",
+};
+
 /** A non-negative integer with at least one nonzero digit, e.g. "500". */
 const WHOLE_POSITIVE_AMOUNT = /^\d+$/;
 
@@ -119,6 +124,18 @@ export function useLoanRegistryWrite(
       if (!sourceAddress) {
         requestTokenRef.current += 1;
         dispatch({ type: "FAILURE", error: NOT_CONNECTED_ERROR });
+        return;
+      }
+      // FCP-02: previously unvalidated here — a non-integer id (e.g.
+      // from a malformed form field) reached `cancelLoanRequest`
+      // as-is and surfaced only as a generic "something went wrong"
+      // once `BigInt(loanId)` failed downstream. Same validate-before-
+      // dispatch shape as `create`'s amount check above, so both
+      // actions fail the same honest way for a bad local input
+      // instead of one of them looking like a real contract error.
+      if (!Number.isInteger(loanId) || loanId < 0) {
+        requestTokenRef.current += 1;
+        dispatch({ type: "FAILURE", error: INVALID_LOAN_ID_ERROR });
         return;
       }
 

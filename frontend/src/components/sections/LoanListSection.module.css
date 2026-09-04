@@ -1,0 +1,56 @@
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--p2p-space-3);
+  margin-bottom: var(--p2p-space-5);
+  flex-wrap: wrap;
+}
+
+.refreshButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-border-strong);
+  background: var(--p2p-surface);
+  color: var(--p2p-text-secondary);
+  font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.refreshButton:hover {
+  color: var(--p2p-text-primary);
+  border-color: var(--p2p-purple-500);
+}
+
+.emptyActionButton {
+  padding: 9px 16px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-purple-600);
+  background: var(--p2p-purple-600);
+  color: #ffffff;
+  font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.emptyActionButton:hover {
+  background: var(--p2p-purple-700);
+  border-color: var(--p2p-purple-700);
+}
+
+.connectNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--p2p-space-2);
+  padding: var(--p2p-space-3) var(--p2p-space-4);
+  margin-bottom: var(--p2p-space-4);
+  border-radius: var(--p2p-radius-sm);
+  background: var(--p2p-bg);
+  border: 1px solid var(--p2p-border);
+  color: var(--p2p-text-secondary);
+  font-size: var(--p2p-text-sm);
+}

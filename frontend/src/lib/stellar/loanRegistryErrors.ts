@@ -158,6 +158,7 @@ export type ContractWriteStatus = "idle" | "pending" | "success" | "failure";
 export type ContractWriteErrorCode =
   | "NOT_CONNECTED"
   | "INVALID_AMOUNT"
+  | "INVALID_LOAN_ID"
   | "REJECTED"
   | "SIMULATION_FAILED"
   | "SUBMISSION_FAILED"
@@ -175,6 +176,7 @@ export interface ContractWriteError {
 const CONTRACT_WRITE_ERROR_CODES: ContractWriteErrorCode[] = [
   "NOT_CONNECTED",
   "INVALID_AMOUNT",
+  "INVALID_LOAN_ID",
   "REJECTED",
   "SIMULATION_FAILED",
   "SUBMISSION_FAILED",

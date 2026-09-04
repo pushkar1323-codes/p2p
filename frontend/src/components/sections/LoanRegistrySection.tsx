@@ -4,32 +4,17 @@ import { useEffect, useState } from "react";
 import type { UseWalletResult } from "@/hooks/useWallet";
 import { LoanLookup } from "@/components/loans/LoanLookup";
 import { LoanRequestActions } from "@/components/loans/LoanRequestActions";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { RealtimeStatusBadge } from "@/components/realtime/RealtimeStatusBadge";
 import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import { useContractEventStream } from "@/hooks/useContractEventStream";
 import { contractEventUpdateToLoanRegistryEvent } from "@/lib/realtime/loanRegistryRealtime";
 import { stellarConfig } from "@/config/stellar";
-import type { SseConnectionStatus } from "@/lib/realtime/sseClient";
 import styles from "./LoanRegistrySection.module.css";
 
 interface LoanRegistrySectionProps {
   wallet: UseWalletResult;
   onLoanCountChange: () => void;
 }
-
-const REALTIME_STATUS_LABEL: Record<SseConnectionStatus, string> = {
-  connecting: "Live sync: connecting…",
-  open: "Live sync: connected",
-  reconnecting: "Live sync: reconnecting…",
-  closed: "Live sync: offline",
-};
-
-const REALTIME_STATUS_TONE: Record<SseConnectionStatus, BadgeTone> = {
-  connecting: "neutral",
-  open: "success",
-  reconnecting: "warning",
-  closed: "neutral",
-};
 
 export function LoanRegistrySection({ wallet, onLoanCountChange }: LoanRegistrySectionProps) {
   // The most recent loan_registry create/cancel event from either
@@ -60,9 +45,7 @@ export function LoanRegistrySection({ wallet, onLoanCountChange }: LoanRegistryS
   return (
     <div>
       <div className={styles.statusRow}>
-        <Badge tone={REALTIME_STATUS_TONE[realtime.status]}>
-          {REALTIME_STATUS_LABEL[realtime.status]}
-        </Badge>
+        <RealtimeStatusBadge status={realtime.status} />
       </div>
       <div className={styles.grid}>
         <LoanRequestActions

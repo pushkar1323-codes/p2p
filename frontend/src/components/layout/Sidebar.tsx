@@ -1,11 +1,13 @@
 "use client";
 
-import { GridIcon, LoanIcon, WalletIcon, CloseIcon, P2PMark } from "@/components/ui/icons";
+import { GridIcon, LoanIcon, WalletIcon, ListIcon, UserIcon, CloseIcon, P2PMark } from "@/components/ui/icons";
 import { NAV_ITEMS, type DashboardSection } from "./navigation";
 import styles from "./Sidebar.module.css";
 
 const ICONS: Record<DashboardSection, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   dashboard: GridIcon,
+  marketplace: ListIcon,
+  "my-loans": UserIcon,
   loans: LoanIcon,
   wallet: WalletIcon,
 };
