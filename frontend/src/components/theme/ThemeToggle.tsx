@@ -19,14 +19,23 @@ const OPTIONS: { id: ThemePreference; label: string; icon: React.ComponentType<R
  * audit: exposing one without real content would violate the "no
  * placeholder pages" rule), so the header is the correct home for it
  * today.
+ *
+ * Renders a neutral state (no option marked active) until
+ * `ThemeProvider` reports `mounted`, i.e. until the real stored
+ * preference has actually been read on the client. This is what
+ * keeps the server-rendered and first-client-rendered markup
+ * identical (see the hydration-fix note in `ThemeProvider.tsx`) —
+ * rendering as if "System" (or any other guess) were already the
+ * confirmed answer before we know that is exactly what caused the
+ * original hydration mismatch.
  */
 export function ThemeToggle() {
-  const { preference, setPreference } = useTheme();
+  const { preference, mounted, setPreference } = useTheme();
 
   return (
     <div className={styles.group} role="radiogroup" aria-label="Theme">
       {OPTIONS.map(({ id, label, icon: Icon }) => {
-        const active = preference === id;
+        const active = mounted && preference === id;
         return (
           <button
             key={id}
