@@ -141,7 +141,7 @@
     position: fixed;
     inset: 0;
     z-index: 30;
-    background: rgba(11, 11, 32, 0.45);
+    background: var(--p2p-overlay);
     border: none;
     padding: 0;
     cursor: pointer;

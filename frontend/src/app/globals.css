@@ -54,10 +54,18 @@
   --p2p-green-50: #e9f9ef;
   --p2p-green-600: #14a35a;
   --p2p-green-700: #0f8a4a;
+  --p2p-green-border: #bfe8cf;
   --p2p-orange-50: #fdf3e4;
   --p2p-orange-600: #c9770d;
   --p2p-red-50: #fbeaea;
   --p2p-red-600: #d1332e;
+  --p2p-red-border: #f3c3c1;
+
+  /* Overlay (mobile nav scrim) */
+  --p2p-overlay: rgba(11, 11, 32, 0.45);
+
+  /* Color scheme hint for native form controls / scrollbars */
+  color-scheme: light;
 
   /* Elevation */
   --p2p-shadow-sm: 0 1px 2px rgba(20, 20, 43, 0.05);
@@ -90,6 +98,69 @@
   --p2p-text-2xl: 28px;
 }
 
+/* ------------------------------------------------------------------
+ * Dark mode token overrides (FCP-01)
+ *
+ * `data-theme="dark"` is applied to <html> by the blocking inline
+ * script in layout.tsx (before first paint, to avoid a flash of the
+ * wrong theme) and kept in sync afterwards by ThemeProvider. Every
+ * component below reads color exclusively through these `--p2p-*`
+ * custom properties, so overriding them here is sufficient to theme
+ * the whole app — no component CSS needs to know about dark mode.
+ *
+ * The navy sidebar scale is deepened rather than left unchanged, so
+ * the sidebar still reads as a distinct, darker surface next to the
+ * dark workspace background instead of blending into it.
+ * ------------------------------------------------------------------ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Navy (sidebar) — deepened for separation from the dark workspace */
+  --p2p-navy-950: #08081a;
+  --p2p-navy-900: #0d0d24;
+  --p2p-navy-800: #17172f;
+  --p2p-navy-700: #202042;
+
+  /* Dark workspace */
+  --p2p-bg: #0c0c16;
+  --p2p-surface: #14141f;
+  --p2p-border: #262637;
+  --p2p-border-strong: #34344a;
+
+  /* Text */
+  --p2p-text-primary: #f2f2fa;
+  --p2p-text-secondary: #a6a6c2;
+  --p2p-text-tertiary: #7d7d99;
+  --p2p-text-inverse: #f3f3fb;
+  --p2p-text-inverse-muted: #9c9cc2;
+
+  /* Brand / purple */
+  --p2p-purple-50: rgba(124, 111, 240, 0.16);
+  --p2p-purple-100: rgba(124, 111, 240, 0.24);
+  --p2p-purple-500: #8577f0;
+  --p2p-purple-600: #6c5ce7;
+  --p2p-purple-700: #aba1f7;
+
+  /* Status */
+  --p2p-green-50: rgba(53, 196, 121, 0.16);
+  --p2p-green-600: #35c479;
+  --p2p-green-700: #6fe0a8;
+  --p2p-green-border: #1f6b43;
+  --p2p-orange-50: rgba(224, 149, 47, 0.18);
+  --p2p-orange-600: #e0952f;
+  --p2p-red-50: rgba(239, 91, 82, 0.16);
+  --p2p-red-600: #ef5b52;
+  --p2p-red-border: #7a2a27;
+
+  /* Overlay */
+  --p2p-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Elevation — deeper, more diffuse shadows read better on dark surfaces */
+  --p2p-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --p2p-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --p2p-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
 html {
   height: 100%;
 }
@@ -109,6 +180,13 @@ body {
   font-family: var(--font-geist-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    transition: none;
+  }
 }
 
 * {

@@ -27,7 +27,7 @@
 }
 
 .success {
-  border-color: #bfe8cf;
+  border-color: var(--p2p-green-border);
   background: var(--p2p-green-50);
 }
 
@@ -37,7 +37,7 @@
 }
 
 .error {
-  border-color: #f3c3c1;
+  border-color: var(--p2p-red-border);
   background: var(--p2p-red-50);
 }
 

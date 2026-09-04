@@ -1,0 +1,38 @@
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--p2p-border-strong);
+  border-radius: var(--p2p-radius-pill);
+  background: var(--p2p-bg);
+  flex-shrink: 0;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--p2p-radius-pill);
+  background: transparent;
+  color: var(--p2p-text-tertiary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.option:hover {
+  color: var(--p2p-text-primary);
+}
+
+.optionActive {
+  background: var(--p2p-surface);
+  color: var(--p2p-purple-600);
+  box-shadow: var(--p2p-shadow-sm);
+}
+
+.optionActive:hover {
+  color: var(--p2p-purple-600);
+}

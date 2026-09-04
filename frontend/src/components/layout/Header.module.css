@@ -46,7 +46,10 @@
 .right {
   display: flex;
   align-items: center;
+  gap: var(--p2p-space-3);
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 @media (max-width: 900px) {

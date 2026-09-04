@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { MenuIcon } from "@/components/ui/icons";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import type { UseWalletResult } from "@/hooks/useWallet";
 import styles from "./Header.module.css";
 
@@ -32,6 +33,7 @@ export function Header({ title, subtitle, wallet, onOpenNav }: HeaderProps) {
       </div>
 
       <div className={styles.right}>
+        <ThemeToggle />
         <ConnectWalletButton {...wallet} />
       </div>
     </header>
