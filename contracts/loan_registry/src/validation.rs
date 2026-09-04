@@ -29,23 +29,28 @@ pub fn require_owner(loan: &LoanRequest, caller: &Address) -> Result<(), Error> 
 }
 
 /// The loan domain state machine's single source of truth for which
-/// status transitions are currently valid (L3-P08).
+/// status transitions are currently valid (L3-P08; `Open -> Funded`
+/// added L3-P12).
 ///
-/// Only `Open -> Cancelled` is valid; everything else — including
-/// `Cancelled -> Cancelled` and any transition into `Funded`,
-/// `Repaying`, `Repaid`, or `Defaulted` (none of which any entrypoint
-/// in this contract currently attempts) — is rejected with the same
-/// `Error::LoanNotOpen` `cancel_loan_request` already returned for an
-/// already-cancelled loan before this task, so this is a stricter
-/// internal statement of the same rule, not an observable behavior
-/// change. Centralizing the rule here, rather than comparing
-/// `loan.status` inline at each call site (as the pre-L3-P08
-/// `require_open` used to), gives future domain increments (funding,
-/// repayment, default handling) one place to extend the transition
+/// `Open -> Cancelled` and `Open -> Funded` are the only valid
+/// transitions; everything else — including `Cancelled -> Cancelled`,
+/// `Funded -> Funded` (i.e. funding an already-funded loan a second
+/// time), and any transition into `Repaying`, `Repaid`, or `Defaulted`
+/// (none of which any entrypoint in this contract currently attempts)
+/// — is rejected with `Error::LoanNotOpen`. Reusing the same error for
+/// "already funded" as for "already cancelled" follows this module's
+/// existing philosophy (see `require_loan_open`'s docs below): both
+/// are, from the caller's point of view, exactly the same underlying
+/// condition — the loan is no longer `Open` — so a dedicated
+/// `AlreadyFunded` variant would only duplicate that meaning.
+/// Centralizing the rule here, rather than comparing `loan.status`
+/// inline at each call site, gives future domain increments
+/// (repayment, default handling) one place to extend the transition
 /// table.
 pub fn require_transition(current: LoanStatus, target: LoanStatus) -> Result<(), Error> {
     match (current, target) {
         (LoanStatus::Open, LoanStatus::Cancelled) => Ok(()),
+        (LoanStatus::Open, LoanStatus::Funded) => Ok(()),
         _ => Err(Error::LoanNotOpen),
     }
 }
@@ -86,6 +91,29 @@ pub fn require_not_already_locked(existing: Option<&Collateral>) -> Result<(), E
     Ok(())
 }
 
+/// `lender` must not be `loan`'s own borrower (L3-P12) — a borrower
+/// funding their own loan request is not a meaningful funding event
+/// and is rejected before any other funding check runs.
+pub fn require_lender_is_not_borrower(loan: &LoanRequest, lender: &Address) -> Result<(), Error> {
+    if loan.borrower == *lender {
+        return Err(Error::LenderIsBorrower);
+    }
+    Ok(())
+}
+
+/// `amount` must exactly equal `loan_amount` (L3-P12). Partial
+/// funding is not supported, so this is a strict equality check, not
+/// a minimum/maximum. Distinct from `validate_amount`, which only
+/// checks positivity and applies to any amount-bearing operation in
+/// this contract, not specifically to matching one loan's requested
+/// amount.
+pub fn require_exact_funding_amount(amount: i128, loan_amount: i128) -> Result<(), Error> {
+    if amount != loan_amount {
+        return Err(Error::FundingAmountMismatch);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     //! Direct unit tests for the pure `require_transition` state-
@@ -106,6 +134,14 @@ mod tests {
     }
 
     #[test]
+    fn open_to_funded_is_a_valid_transition() {
+        assert_eq!(
+            require_transition(LoanStatus::Open, LoanStatus::Funded),
+            Ok(())
+        );
+    }
+
+    #[test]
     fn cancelled_to_cancelled_is_not_a_valid_transition() {
         assert_eq!(
             require_transition(LoanStatus::Cancelled, LoanStatus::Cancelled),
@@ -114,9 +150,8 @@ mod tests {
     }
 
     #[test]
-    fn no_transition_into_an_inactive_status_is_valid() {
+    fn no_transition_into_a_still_unreachable_status_is_valid() {
         for target in [
-            LoanStatus::Funded,
             LoanStatus::Repaying,
             LoanStatus::Repaid,
             LoanStatus::Defaulted,
@@ -139,6 +174,27 @@ mod tests {
         ] {
             assert_eq!(
                 require_transition(LoanStatus::Cancelled, target),
+                Err(Error::LoanNotOpen)
+            );
+        }
+    }
+
+    #[test]
+    fn funded_cannot_transition_anywhere() {
+        // In particular: funding an already-funded loan a second time
+        // is rejected, and a `Funded` loan cannot be cancelled — once
+        // funded, `cancel_loan_request` (and therefore its collateral
+        // release) is no longer reachable (L3-P12).
+        for target in [
+            LoanStatus::Open,
+            LoanStatus::Cancelled,
+            LoanStatus::Funded,
+            LoanStatus::Repaying,
+            LoanStatus::Repaid,
+            LoanStatus::Defaulted,
+        ] {
+            assert_eq!(
+                require_transition(LoanStatus::Funded, target),
                 Err(Error::LoanNotOpen)
             );
         }

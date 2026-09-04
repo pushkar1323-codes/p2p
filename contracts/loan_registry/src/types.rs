@@ -5,24 +5,25 @@
 //!
 //! `LoanStatus` (L3-P08) now names the full P2P lending domain state
 //! machine this contract is the foundation for — `Open`, `Cancelled`,
-//! `Funded`, `Repaying`, `Repaid`, `Defaulted` — but this contract
-//! only ever produces `Open` and `Cancelled` values: the other four
-//! variants exist purely as type representation so the future
-//! funding/repayment contract work
-//! (`06_LEVEL_IMPLEMENTATION_PLAN.md`'s Level 3/4 P2P features) has a
-//! shared vocabulary to extend into, without any later migration of
-//! already-stored `LoanStatus` values. No code path in this crate
-//! constructs, matches on, or transitions into any of the four
-//! inactive variants — see `validation.rs`'s `require_transition` for
-//! the single, explicit place the currently-supported transition
-//! (`Open -> Cancelled`) is enforced.
+//! `Funded`, `Repaying`, `Repaid`, `Defaulted`. As of L3-P12,
+//! `Funded` is reachable (via `fund_loan`) alongside `Cancelled`;
+//! `Repaying`/`Repaid`/`Defaulted` remain purely type representation
+//! for the future repayment/default contract work
+//! (`06_LEVEL_IMPLEMENTATION_PLAN.md`'s Level 3/4 P2P features), so
+//! that work has a shared vocabulary to extend into without any later
+//! migration of already-stored `LoanStatus` values. See
+//! `validation.rs`'s `require_transition` for the single, explicit
+//! place both currently-supported transitions (`Open -> Cancelled`,
+//! `Open -> Funded`) are enforced.
 
 use soroban_sdk::{contracttype, Address};
 
-/// A borrower's request for a loan. Intentionally minimal: no
-/// lender, funding, interest, or repayment state yet — this is the
-/// first on-chain primitive the future P2P lending/funding contract
-/// work will build on.
+/// A borrower's request for a loan. Intentionally minimal: interest,
+/// repayment, and collateral state live in their own records
+/// (`Collateral`, `Funding`) rather than here — this struct only ever
+/// grows the fields every loan needs regardless of what has happened
+/// to it since (currently just `status`; see those other types for
+/// what's tracked once collateral is locked or the loan is funded).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LoanRequest {
@@ -38,21 +39,21 @@ pub struct LoanRequest {
     pub status: LoanStatus,
 }
 
-/// The full P2P lending loan domain state machine (L3-P08). Only
-/// `Open` and `Cancelled` are reachable through this contract's
-/// current entrypoints — see the module-level docs above.
+/// The full P2P lending loan domain state machine (L3-P08). `Open`,
+/// `Cancelled`, and (as of L3-P12) `Funded` are reachable through this
+/// contract's current entrypoints — see the module-level docs above.
 #[contracttype]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)] // Funded/Repaying/Repaid/Defaulted: type representation only, not yet reachable — see module docs.
+#[allow(dead_code)] // Repaying/Repaid/Defaulted: type representation only, not yet reachable — see module docs.
 pub enum LoanStatus {
     /// Awaiting funding. The only status a newly created loan
     /// request can have.
     Open,
     /// Withdrawn by the borrower before being funded.
     Cancelled,
-    /// A lender has funded the loan. No code path in this contract
-    /// currently produces this state — reserved for the future
-    /// funding contract work.
+    /// A lender has funded the loan (L3-P12, via `fund_loan`). See
+    /// `funding.rs` for the funding record this transition is always
+    /// accompanied by.
     Funded,
     /// The borrower is actively repaying a funded loan. No code path
     /// in this contract currently produces this state — reserved for
@@ -109,4 +110,31 @@ pub struct Collateral {
     /// The amount of `token` locked, in its smallest unit.
     pub amount: i128,
     pub status: CollateralStatus,
+}
+
+/// A record of the single lender who funded one loan request
+/// (L3-P12). Deliberately minimal, and deliberately singular: partial
+/// funding and multiple lenders are explicitly out of scope for this
+/// task (see `funding.rs`'s module docs) — a loan either has no
+/// `Funding` record yet (still `Open`), or has exactly one, recorded
+/// atomically with the `Open -> Funded` transition. No interest,
+/// repayment schedule, or due date is stored here; that is separate,
+/// later work.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Funding {
+    /// The loan request this funding record belongs to.
+    pub loan_id: u64,
+    /// The address that funded the loan. `funding::fund` enforces
+    /// this is never the loan's own `borrower`.
+    pub lender: Address,
+    /// The token contract address of the asset the loan was funded
+    /// in. Any SEP-41-compatible token is accepted; like
+    /// `Collateral::token`, this contract does not restrict which
+    /// asset may be used.
+    pub token: Address,
+    /// The amount of `token` transferred. Always exactly equal to the
+    /// funded loan's `LoanRequest::amount` — `funding::fund` enforces
+    /// this before any transfer happens.
+    pub amount: i128,
 }

@@ -19,7 +19,7 @@
 //! persistent storage choice per key, same default-to-zero read, same
 //! increment-then-persist sequence for `next_loan_id`.
 
-use crate::types::{Collateral, LoanRequest};
+use crate::types::{Collateral, Funding, LoanRequest};
 use soroban_sdk::{contracttype, Address, Env};
 
 /// Storage keys for this contract's persistent state.
@@ -43,6 +43,10 @@ enum DataKey {
     /// keyed by loan id (L3-P11). Absent if no collateral has ever
     /// been locked for that loan.
     Collateral(u64),
+    /// Persistent-storage entry for one loan's funding record, keyed
+    /// by loan id (L3-P12). Absent until `fund_loan` succeeds for
+    /// that loan.
+    Funding(u64),
 }
 
 /// Returns the total number of loan requests ever created (including
@@ -115,4 +119,20 @@ pub fn set_collateral(env: &Env, loan_id: u64, collateral: &Collateral) {
     env.storage()
         .persistent()
         .set(&DataKey::Collateral(loan_id), collateral);
+}
+
+/// Reads the stored funding record for `loan_id`, if the loan has
+/// been funded (L3-P12).
+pub fn get_funding(env: &Env, loan_id: u64) -> Option<Funding> {
+    env.storage().persistent().get(&DataKey::Funding(loan_id))
+}
+
+/// Writes (creating) the funding record stored at `loan_id`
+/// (L3-P12). `funding::fund` calls this only once per loan — no
+/// partial or repeated funding is supported, so nothing in this
+/// contract ever overwrites an existing `Funding` record.
+pub fn set_funding(env: &Env, loan_id: u64, funding: &Funding) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Funding(loan_id), funding);
 }

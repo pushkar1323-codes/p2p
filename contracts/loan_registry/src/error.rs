@@ -44,4 +44,17 @@ pub enum Error {
     /// `get_collateral` was called for a loan that has never had
     /// collateral locked against it (L3-P11).
     CollateralNotFound = 11,
+    /// `fund_loan` was called by the loan's own borrower — a lender
+    /// funding their own loan request is not a meaningful funding
+    /// event (L3-P12).
+    LenderIsBorrower = 12,
+    /// `fund_loan`'s `amount` did not exactly equal the loan's
+    /// requested `amount` (L3-P12). Distinct from `InvalidAmount`,
+    /// which only checks that `amount` is positive — this checks it
+    /// against the specific loan being funded. Partial funding is not
+    /// supported.
+    FundingAmountMismatch = 13,
+    /// `get_funding` was called for a loan that has never been funded
+    /// (L3-P12).
+    FundingNotFound = 14,
 }

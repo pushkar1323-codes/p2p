@@ -55,3 +55,15 @@ pub fn publish_collateral_released(
         (loan_id, token, amount),
     );
 }
+
+/// Publishes the `("funded", lender)` topics / `(loan_id, token,
+/// amount)` data event when a loan is successfully funded (L3-P12).
+/// The second topic is the *lender* — the address that authorized and
+/// carried out this call — unlike the collateral events above, whose
+/// second topic is the borrower; each event's second topic is
+/// whichever address actually invoked/authorized that specific
+/// operation.
+pub fn publish_funded(env: &Env, lender: Address, loan_id: u64, token: Address, amount: i128) {
+    env.events()
+        .publish((symbol_short!("funded"), lender), (loan_id, token, amount));
+}

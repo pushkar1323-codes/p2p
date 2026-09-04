@@ -402,6 +402,25 @@ fn setup_with_token(initial_balance: i128) -> (Env, LoanRegistryClient<'static>,
     (env, client, borrower, token)
 }
 
+/// Like `setup_with_token`, but mints `initial_balance` to a freshly
+/// generated *lender* address instead of the borrower (L3-P12) —
+/// funding tests need funds on the lender's side, not the borrower's.
+/// Returns `(env, client, borrower, lender, token)`.
+fn setup_with_lender_token(
+    initial_balance: i128,
+) -> (Env, LoanRegistryClient<'static>, Address, Address, Address) {
+    let (env, client, borrower) = setup();
+
+    let token_admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(token_admin);
+    let token = sac.address();
+
+    let lender = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&lender, &initial_balance);
+
+    (env, client, borrower, lender, token)
+}
+
 #[test]
 fn locking_collateral_transfers_tokens_into_escrow_and_stores_a_locked_record() {
     let (env, client, borrower, token) = setup_with_token(1_000i128);
@@ -651,4 +670,264 @@ fn reading_collateral_for_a_loan_that_never_had_any_fails() {
 
     let result = client.try_get_collateral(&loan_id);
     assert_eq!(result, Err(Ok(Error::CollateralNotFound)));
+}
+
+// --- L3-P12: lender funding -----------------------------------
+
+#[test]
+fn funding_an_open_loan_transfers_tokens_and_transitions_to_funded() {
+    let (env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&lender), 5_000);
+    assert_eq!(token_client.balance(&client.address), 5_000);
+
+    let loan = client.get_loan_request(&loan_id);
+    assert_eq!(loan.status, LoanStatus::Funded);
+
+    let funding = client.get_funding(&loan_id);
+    assert_eq!(funding.loan_id, loan_id);
+    assert_eq!(funding.lender, lender);
+    assert_eq!(funding.token, token);
+    assert_eq!(funding.amount, 5_000);
+}
+
+#[test]
+fn funding_a_nonexistent_loan_fails() {
+    let (_env, client, _borrower, lender, token) = setup_with_lender_token(10_000i128);
+
+    let result = client.try_fund_loan(&lender, &999u64, &token, &5_000i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotFound)));
+
+    let missing = client.try_get_funding(&999u64);
+    assert_eq!(missing, Err(Ok(Error::FundingNotFound)));
+}
+
+#[test]
+fn funding_a_cancelled_loan_fails() {
+    let (_env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.cancel_loan_request(&borrower, &loan_id);
+
+    let result = client.try_fund_loan(&lender, &loan_id, &token, &5_000i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotOpen)));
+
+    let missing = client.try_get_funding(&loan_id);
+    assert_eq!(missing, Err(Ok(Error::FundingNotFound)));
+}
+
+#[test]
+fn funding_an_already_funded_loan_fails() {
+    let (env, client, borrower, lender, token) = setup_with_lender_token(20_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+
+    // A second lender attempting to fund the now-`Funded` loan is
+    // rejected the same way any other non-`Open` loan is.
+    let second_lender = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&second_lender, &5_000i128);
+    let result = client.try_fund_loan(&second_lender, &loan_id, &token, &5_000i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotOpen)));
+
+    // The original funding record and balances must be unaffected by
+    // the rejected second attempt.
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&second_lender), 5_000);
+    assert_eq!(token_client.balance(&client.address), 5_000);
+    let funding = client.get_funding(&loan_id);
+    assert_eq!(funding.lender, lender);
+    assert_eq!(funding.amount, 5_000);
+}
+
+#[test]
+fn a_borrower_cannot_fund_their_own_loan() {
+    let (env, client, borrower, token) = setup_with_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_fund_loan(&borrower, &loan_id, &token, &5_000i128);
+    assert_eq!(result, Err(Ok(Error::LenderIsBorrower)));
+
+    // Nothing should have moved or been recorded.
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&borrower), 10_000);
+    assert_eq!(token_client.balance(&client.address), 0);
+    let missing = client.try_get_funding(&loan_id);
+    assert_eq!(missing, Err(Ok(Error::FundingNotFound)));
+}
+
+#[test]
+fn funding_with_too_little_fails() {
+    let (_env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_fund_loan(&lender, &loan_id, &token, &4_999i128);
+    assert_eq!(result, Err(Ok(Error::FundingAmountMismatch)));
+}
+
+#[test]
+fn funding_with_too_much_fails() {
+    let (_env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_fund_loan(&lender, &loan_id, &token, &5_001i128);
+    assert_eq!(result, Err(Ok(Error::FundingAmountMismatch)));
+}
+
+#[test]
+fn funding_zero_amount_fails() {
+    let (_env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_fund_loan(&lender, &loan_id, &token, &0i128);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn funding_negative_amount_fails() {
+    let (_env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_fund_loan(&lender, &loan_id, &token, &-5_000i128);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+#[should_panic]
+fn funding_with_insufficient_lender_balance_panics() {
+    let (_env, client, borrower, lender, token) = setup_with_lender_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    // The token contract itself rejects this — panicking, per
+    // SEP-41's `transfer`, rather than returning a `Result` — see
+    // `funding.rs`'s "Atomicity" docs for why a panic here can never
+    // leave partial state.
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+}
+
+#[test]
+fn a_failed_fund_loan_call_leaves_loan_and_funding_state_unchanged() {
+    let (env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let _ = client.try_fund_loan(&lender, &loan_id, &token, &4_999i128);
+
+    let loan = client.get_loan_request(&loan_id);
+    assert_eq!(loan.status, LoanStatus::Open);
+    let missing = client.try_get_funding(&loan_id);
+    assert_eq!(missing, Err(Ok(Error::FundingNotFound)));
+    let token_client = TokenClient::new(&env, &token);
+    assert_eq!(token_client.balance(&lender), 10_000);
+    assert_eq!(token_client.balance(&client.address), 0);
+}
+
+#[test]
+fn funding_emits_a_funded_event_with_loan_id_token_and_amount() {
+    let (env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+
+    // The token contract's own `mint`/`transfer` calls also emit
+    // events into the same `Env`, so this filters down to just
+    // `loan_registry`'s own events by contract address — same
+    // rationale as the collateral event tests above.
+    let last_event = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(id, _, _)| *id == client.address)
+        .last()
+        .unwrap();
+    assert_eq!(
+        vec![&env, last_event],
+        vec![
+            &env,
+            (
+                client.address.clone(),
+                (symbol_short!("funded"), lender.clone()).into_val(&env),
+                (loan_id, token.clone(), 5_000i128).into_val(&env),
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_failed_fund_loan_call_does_not_emit_an_event() {
+    let (env, client, borrower, lender, token) = setup_with_lender_token(10_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    let events_before = env.events().all().len();
+
+    let _ = client.try_fund_loan(&lender, &loan_id, &token, &4_999i128);
+
+    assert_eq!(env.events().all().len(), events_before);
+}
+
+#[test]
+fn reading_funding_for_a_loan_that_was_never_funded_fails() {
+    let (_env, client, borrower) = setup();
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+
+    let result = client.try_get_funding(&loan_id);
+    assert_eq!(result, Err(Ok(Error::FundingNotFound)));
+}
+
+// --- L3-P12: interaction with L3-P11 collateral -----------------
+
+#[test]
+fn funding_does_not_disturb_previously_locked_collateral() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+
+    let lender = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&lender, &5_000i128);
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+
+    // Collateral locked before funding must still be exactly as it
+    // was — funding does not touch it (L3-P12's documented boundary
+    // with `collateral.rs`).
+    let collateral = client.get_collateral(&loan_id);
+    assert_eq!(collateral.status, CollateralStatus::Locked);
+    assert_eq!(collateral.amount, 600);
+}
+
+#[test]
+fn a_funded_loan_can_no_longer_be_cancelled_so_its_collateral_cannot_be_released() {
+    let (env, client, borrower, token) = setup_with_token(1_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.lock_collateral(&borrower, &loan_id, &token, &600i128);
+
+    let lender = Address::generate(&env);
+    StellarAssetClient::new(&env, &token).mint(&lender, &5_000i128);
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+
+    // This is the documented consequence of L3-P11's release trigger
+    // (`cancel_loan_request` only) combined with L3-P12's transition
+    // table: once `Funded`, cancellation — and therefore collateral
+    // release — is no longer reachable. Not a bug; a known limitation
+    // recorded in `funding.rs`'s module docs.
+    let result = client.try_cancel_loan_request(&borrower, &loan_id);
+    assert_eq!(result, Err(Ok(Error::LoanNotOpen)));
+
+    let collateral = client.get_collateral(&loan_id);
+    assert_eq!(collateral.status, CollateralStatus::Locked);
+}
+
+#[test]
+fn collateral_cannot_be_locked_after_a_loan_is_already_funded() {
+    let (env, client, borrower, lender, token) = setup_with_lender_token(5_000i128);
+    let loan_id = client.create_loan_request(&borrower, &5_000i128);
+    client.fund_loan(&lender, &loan_id, &token, &5_000i128);
+
+    // Demonstrates the ordering constraint documented in
+    // `funding.rs`: collateral, if wanted, must be locked *before*
+    // funding — `require_loan_open` (which `lock_collateral` also
+    // uses) can never succeed again once a loan is `Funded`.
+    let borrower_token = StellarAssetClient::new(&env, &token);
+    borrower_token.mint(&borrower, &1_000i128);
+    let result = client.try_lock_collateral(&borrower, &loan_id, &token, &600i128);
+    assert_eq!(result, Err(Ok(Error::LoanNotOpen)));
 }
