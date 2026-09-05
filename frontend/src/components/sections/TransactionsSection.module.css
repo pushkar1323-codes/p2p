@@ -1,0 +1,116 @@
+.loadingRow {
+  display: flex;
+  justify-content: center;
+  padding: var(--p2p-space-8) 0;
+}
+
+.refreshButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-border-strong);
+  background: var(--p2p-surface);
+  color: var(--p2p-text-secondary);
+  font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.refreshButton:hover {
+  color: var(--p2p-text-primary);
+  border-color: var(--p2p-purple-500);
+}
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-red-600);
+  background: transparent;
+  color: var(--p2p-red-600);
+  font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retryButton:hover {
+  background: var(--p2p-red-50);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--p2p-text-sm);
+}
+
+.table th {
+  text-align: left;
+  padding: var(--p2p-space-2) var(--p2p-space-3);
+  color: var(--p2p-text-tertiary);
+  font-size: var(--p2p-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  border-bottom: 1px solid var(--p2p-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--p2p-space-3);
+  border-bottom: 1px solid var(--p2p-border);
+  color: var(--p2p-text-primary);
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.mono {
+  font-family: var(--font-geist-mono);
+}
+
+.eventBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--p2p-radius-pill);
+  font-size: var(--p2p-text-xs);
+  font-weight: 600;
+  background: var(--p2p-green-50);
+  color: var(--p2p-green-700);
+  text-transform: capitalize;
+}
+
+.eventBadgeMuted {
+  background: var(--p2p-red-50);
+  color: var(--p2p-red-600);
+}
+
+.txLink {
+  font-family: var(--font-geist-mono);
+  color: var(--p2p-purple-600);
+  text-decoration: none;
+}
+
+.txLink:hover {
+  text-decoration: underline;
+}
+
+.timeCell {
+  color: var(--p2p-text-secondary);
+}
+
+@media (max-width: 640px) {
+  .table th,
+  .table td {
+    padding: var(--p2p-space-2);
+  }
+}

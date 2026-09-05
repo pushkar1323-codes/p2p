@@ -9,7 +9,11 @@ import { LoanRegistrySection } from "@/components/sections/LoanRegistrySection";
 import { BrowseLoansSection } from "@/components/sections/BrowseLoansSection";
 import { MyLoansSection } from "@/components/sections/MyLoansSection";
 import { LoanDetailSection } from "@/components/sections/LoanDetailSection";
+import { ActivitySection } from "@/components/sections/ActivitySection";
+import { TransactionsSection } from "@/components/sections/TransactionsSection";
 import { WalletSection } from "@/components/sections/WalletSection";
+import { ProfileSection } from "@/components/sections/ProfileSection";
+import { SettingsSection } from "@/components/sections/SettingsSection";
 import type { DashboardSection } from "@/components/layout/navigation";
 import { useWallet } from "@/hooks/useWallet";
 import { useXlmBalance } from "@/hooks/useXlmBalance";
@@ -33,9 +37,25 @@ const SECTION_META: Record<DashboardSection, { title: string; subtitle: string }
     title: "Loan Registry",
     subtitle: "Create, cancel and look up loan requests on Stellar Testnet.",
   },
+  activity: {
+    title: "Activity",
+    subtitle: "A live feed of real contract events, for as long as this page stays open.",
+  },
+  transactions: {
+    title: "Transactions",
+    subtitle: "Persisted loan_registry event history, recorded by the backend.",
+  },
   wallet: {
     title: "Wallet",
     subtitle: "Your Testnet XLM balance and transfers.",
+  },
+  profile: {
+    title: "Profile",
+    subtitle: "Your connected wallet and real participation on this contract.",
+  },
+  settings: {
+    title: "Settings",
+    subtitle: "Application preferences.",
   },
 };
 
@@ -120,9 +140,17 @@ export default function Home() {
             <LoanRegistrySection wallet={wallet} onLoanCountChange={loanCount.refresh} />
           )}
 
+          {!viewingLoanDetail && activeSection === "activity" && <ActivitySection />}
+
+          {!viewingLoanDetail && activeSection === "transactions" && <TransactionsSection />}
+
           {!viewingLoanDetail && activeSection === "wallet" && (
             <WalletSection wallet={wallet} balance={balance} />
           )}
+
+          {!viewingLoanDetail && activeSection === "profile" && <ProfileSection wallet={wallet} />}
+
+          {!viewingLoanDetail && activeSection === "settings" && <SettingsSection />}
         </div>
       </div>
     </div>

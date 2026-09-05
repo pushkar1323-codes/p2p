@@ -1,6 +1,17 @@
 "use client";
 
-import { GridIcon, LoanIcon, WalletIcon, ListIcon, UserIcon, CloseIcon, P2PMark } from "@/components/ui/icons";
+import {
+  GridIcon,
+  LoanIcon,
+  WalletIcon,
+  ListIcon,
+  UserIcon,
+  ActivityIcon,
+  ClockIcon,
+  SettingsIcon,
+  CloseIcon,
+  P2PMark,
+} from "@/components/ui/icons";
 import { NAV_ITEMS, type DashboardSection } from "./navigation";
 import styles from "./Sidebar.module.css";
 
@@ -9,7 +20,11 @@ const ICONS: Record<DashboardSection, React.ComponentType<React.SVGProps<SVGSVGE
   marketplace: ListIcon,
   "my-loans": UserIcon,
   loans: LoanIcon,
+  activity: ActivityIcon,
+  transactions: ClockIcon,
   wallet: WalletIcon,
+  profile: UserIcon,
+  settings: SettingsIcon,
 };
 
 interface SidebarProps {

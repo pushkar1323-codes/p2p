@@ -16,6 +16,7 @@ import { useLoanRequest } from "@/hooks/useLoanRequest";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
 import { useContractEventStream } from "@/hooks/useContractEventStream";
 import { contractEventUpdateToLoanRegistryEvent } from "@/lib/realtime/loanRegistryRealtime";
+import { reportConfirmedLoanEvent } from "@/lib/backend/eventsApi";
 import { stellarConfig } from "@/config/stellar";
 import type { UseWalletResult } from "@/hooks/useWallet";
 import type { ContractEventUpdate } from "@/lib/realtime/types";
@@ -80,6 +81,24 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
     await write.cancelLoanRequest(loanId);
     refresh();
   }
+
+  // FCP-03: reports a successful cancel to the backend's history API
+  // exactly once per confirmed transaction — same guarded-by-txHash
+  // pattern as LoanRequestActions.tsx's own reporting effect (and the
+  // same reasoning: fire-and-forget, since the on-chain cancellation
+  // already succeeded by the time this runs).
+  const reportedTxHashRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (write.status !== "success" || !write.txHash || !write.result?.event) return;
+    if (reportedTxHashRef.current === write.txHash) return;
+    reportedTxHashRef.current = write.txHash;
+    void reportConfirmedLoanEvent({
+      txHash: write.txHash,
+      event: write.result.event,
+      network: stellarConfig.network,
+      contractId: stellarConfig.loanRegistryContractId,
+    });
+  }, [write.status, write.txHash, write.result]);
 
   const notFound = status === "error" && error?.code === "LOAN_NOT_FOUND";
   const isBorrower = connected && data?.borrower === wallet.address;

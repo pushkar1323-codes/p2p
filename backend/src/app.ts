@@ -4,6 +4,7 @@ import { createEventsRouter } from "./routes/events.ts";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.ts";
 import { corsMiddleware } from "./middleware/cors.ts";
 import { getEventBroadcaster, type EventBroadcaster } from "./realtime/eventBroadcaster.ts";
+import type { Database } from "./db/client.ts";
 
 export interface CreateAppOptions {
   /**
@@ -14,6 +15,15 @@ export interface CreateAppOptions {
    * the running app.
    */
   eventBroadcaster?: EventBroadcaster;
+  /**
+   * The `Database` the `/events` history routes (FCP-03) use.
+   * Defaults to the process-wide singleton (`getDb()`, lazily created
+   * from `DATABASE_URL`) when omitted. Tests inject an isolated
+   * connection (typically a rolled-back transaction) so they never
+   * touch real data or require a live database for the routes that
+   * don't need one.
+   */
+  db?: Database;
 }
 
 /**
@@ -21,10 +31,8 @@ export interface CreateAppOptions {
  * `server.ts` (which actually calls `.listen()`) so tests can exercise
  * the app in-process without binding a real port.
  *
- * No P2P domain/business routes are wired here yet — this is the
- * configuration/validation/health/error-handling/real-time foundation
- * only, per this task's scope. Future route modules should be mounted
- * here, before `notFoundHandler`/`errorHandler`.
+ * Route modules mounted here, before `notFoundHandler`/`errorHandler`:
+ * health, and `/events` (real-time stream + FCP-03's history API).
  */
 export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
@@ -35,7 +43,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const eventBroadcaster = options.eventBroadcaster ?? getEventBroadcaster();
 
   app.use(healthRouter);
-  app.use(createEventsRouter(eventBroadcaster));
+  app.use(createEventsRouter(eventBroadcaster, options.db));
 
   // Must come after every real route, and errorHandler must come last.
   app.use(notFoundHandler);

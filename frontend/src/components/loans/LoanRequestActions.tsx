@@ -8,6 +8,8 @@ import { TransactionFeedback } from "@/components/transaction/TransactionFeedbac
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
+import { reportConfirmedLoanEvent } from "@/lib/backend/eventsApi";
+import { stellarConfig } from "@/config/stellar";
 import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import type { WalletStatus } from "@/lib/wallet/types";
 import styles from "./LoanRequestActions.module.css";
@@ -53,12 +55,23 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
   // produced a decoded event — a ref (not state) tracks which txHash
   // was already reported, so this doesn't re-fire on unrelated
   // re-renders and doesn't require onEvent to be stable/memoized.
+  // FCP-03: the same guard also reports the event to the backend's
+  // history API exactly once — see reportConfirmedLoanEvent's doc
+  // comment for why this is the only place either backend table gets
+  // written to, and why a failure there is fire-and-forget (logged,
+  // never surfaced here — the on-chain write already succeeded).
   const reportedTxHashRef = useRef<string | null>(null);
   useEffect(() => {
     if (status !== "success" || !txHash || !result?.event) return;
     if (reportedTxHashRef.current === txHash) return;
     reportedTxHashRef.current = txHash;
     onEvent?.(result.event);
+    void reportConfirmedLoanEvent({
+      txHash,
+      event: result.event,
+      network: stellarConfig.network,
+      contractId: stellarConfig.loanRegistryContractId,
+    });
   }, [status, txHash, result, onEvent]);
 
   async function handleCreate(e: React.FormEvent) {

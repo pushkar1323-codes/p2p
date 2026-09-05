@@ -219,6 +219,32 @@ export function ArrowLeftIcon(props: IconProps) {
   );
 }
 
+export function ActivityIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2.5 10.5h3.2l1.8-5.5 3 11 1.8-5.5h3.2" />
+    </svg>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="10" cy="10.5" r="7" />
+      <path d="M10 6.5v4l3 2" />
+    </svg>
+  );
+}
+
+export function SettingsIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="10" cy="10" r="2.6" />
+      <path d="M10 3.2v2M10 14.8v2M16.8 10h-2M5.2 10h-2M14.9 5.1l-1.4 1.4M6.5 13.5l-1.4 1.4M14.9 14.9l-1.4-1.4M6.5 6.5 5.1 5.1" />
+    </svg>
+  );
+}
+
 /** The P2P brand mark: two linked nodes, echoing "peer to peer". */
 export function P2PMark(props: IconProps) {
   return (

@@ -1,3 +1,34 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p2p-space-5);
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--p2p-space-3);
+  padding: var(--p2p-space-3) 0;
+  border-bottom: 1px solid var(--p2p-border);
+}
+
+.accountRow:last-child {
+  border-bottom: none;
+}
+
+.accountLabel {
+  font-size: var(--p2p-text-sm);
+  color: var(--p2p-text-secondary);
+  font-weight: 500;
+}
+
+.accountValue {
+  font-size: var(--p2p-text-sm);
+  color: var(--p2p-text-primary);
+  font-weight: 600;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
