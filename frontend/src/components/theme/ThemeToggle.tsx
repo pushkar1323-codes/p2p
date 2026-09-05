@@ -12,13 +12,14 @@ const OPTIONS: { id: ThemePreference; label: string; icon: React.ComponentType<R
 ];
 
 /**
- * A compact, always-visible Light/Dark/System control. Placed in the
+ * A compact, always-visible Light/Dark/System control, placed in the
  * header per FCP-01 ("a visible theme toggle in an appropriate
  * persistent UI location, preferably the header/profile/settings
- * area") — there is no profile/settings page yet (see the FCP-01
- * audit: exposing one without real content would violate the "no
- * placeholder pages" rule), so the header is the correct home for it
- * today.
+ * area"). FCP-03 later added a full Settings page with its own
+ * labelled instance of this same control (see SettingsSection.tsx) —
+ * both are kept intentionally: this one for always-visible access
+ * from any screen, the Settings one alongside the app's other
+ * preferences.
  *
  * Renders a neutral state (no option marked active) until
  * `ThemeProvider` reports `mounted`, i.e. until the real stored

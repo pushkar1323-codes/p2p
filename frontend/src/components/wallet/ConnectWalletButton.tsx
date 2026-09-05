@@ -1,13 +1,9 @@
 "use client";
 
 /**
- * Wallet connection UI (L2-P01 UI refinement).
- *
- * This intentionally uses plain markup/inline-ish styling rather than
- * the final P2P design system, per project scope: full visual design
- * is a later task (see 04_UI_UX.md, 00_MASTER_RULES.md #17). It does
- * follow the existing restrained/no-neon palette already established
- * by this and sibling wallet components (XlmBalance, TransferForm).
+ * Wallet connection UI (L2-P01 UI refinement; restyled onto the
+ * shared `--p2p-*` design tokens in FCP-01, see
+ * `ConnectWalletButton.module.css`).
  *
  * Accepts wallet state as props (rather than calling `useWallet()`
  * internally) so a single wallet session, created once in the parent

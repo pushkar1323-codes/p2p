@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { AddressChip } from "@/components/ui/AddressChip";
-import { PlusIcon, CancelActionIcon, CheckCircleIcon } from "@/components/ui/icons";
+import { PlusIcon, CheckCircleIcon } from "@/components/ui/icons";
 import { TransactionFeedback } from "@/components/transaction/TransactionFeedback";
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
@@ -14,40 +14,42 @@ import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import type { WalletStatus } from "@/lib/wallet/types";
 import styles from "./LoanRequestActions.module.css";
 
-type Mode = "create" | "cancel";
-
 interface LoanRequestActionsProps {
   walletStatus: WalletStatus;
   address: string | null;
-  /** Called after any successful create/cancel, so the caller can
-   *  refresh the shared loan count. */
+  /** Called after a successful create, so the caller can refresh the
+   *  shared loan count. */
   onSuccess?: () => void;
   /**
    * Called once per successful write with the contract's own decoded
-   * `created`/`cancelled` event (L2-P08), so a sibling component
-   * (e.g. Loan Lookup) can synchronize if it happens to be showing
-   * the affected loan. Not called if the event couldn't be decoded —
-   * there is nothing real to report in that case.
+   * `created` event (L2-P08), so a sibling component (e.g. Loan
+   * Lookup) can synchronize if it happens to be showing the affected
+   * loan. Not called if the event couldn't be decoded — there is
+   * nothing real to report in that case.
    */
   onEvent?: (event: LoanRegistryEvent) => void;
 }
 
 /**
- * `useLoanRegistryWrite` intentionally shares one idle/pending/
- * success/failure state across both `createLoanRequest` and
- * `cancelLoanRequest` (see CURRENT_STATUS.md — L2-P06 decision). This
- * component reflects that honestly with a single segmented Create /
- * Cancel panel and one shared feedback area below, rather than two
- * independent-looking forms that would imply independent state.
+ * Create-only loan request form.
+ *
+ * FCP-04: this component previously also offered a raw "cancel by
+ * loan ID" form, sharing `useLoanRegistryWrite`'s idle/pending/
+ * success/failure state across a Create/Cancel tab pair. That cancel
+ * path is removed here — it duplicated `LoanDetailSection`'s cancel
+ * action (reached from Browse Loans/My Loans) without any of its
+ * state awareness (it would accept any ID, whether or not the loan
+ * was actually open or owned by the connected wallet, relying purely
+ * on the contract to reject it). One state-aware cancel path is
+ * enough; keeping both was confusing, not merely duplicated pixels.
+ * Cancelling a loan is now only ever done from Loan Details.
  */
 export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }: LoanRequestActionsProps) {
-  const [mode, setMode] = useState<Mode>("create");
   const [amount, setAmount] = useState("");
-  const [cancelLoanId, setCancelLoanId] = useState("");
 
   const connected = walletStatus === "connected";
   const write = useLoanRegistryWrite(connected ? address : null);
-  const { status, txHash, result, error, createLoanRequest, cancelLoanRequest, reset } = write;
+  const { status, txHash, result, error, createLoanRequest, reset } = write;
 
   const pending = status === "pending";
 
@@ -81,54 +83,17 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
     onSuccess?.();
   }
 
-  async function handleCancel(e: React.FormEvent) {
-    e.preventDefault();
-    if (pending) return;
-    const id = Number(cancelLoanId.trim());
-    await cancelLoanRequest(id);
-    onSuccess?.();
-  }
-
-  function switchMode(next: Mode) {
-    if (pending) return;
-    setMode(next);
-    reset();
-  }
-
   return (
     <Card>
       <CardHeader
-        icon={mode === "create" ? <PlusIcon width={18} height={18} /> : <CancelActionIcon width={18} height={18} />}
-        title="Loan Actions"
-        description="Create or cancel a loan request on the loan_registry contract."
+        icon={<PlusIcon width={18} height={18} />}
+        title="Create Loan Request"
+        description="Create a new loan request on the loan_registry contract."
       />
 
-      <div className={styles.tabs} role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "create"}
-          className={`${styles.tab} ${mode === "create" ? styles.tabActive : ""}`}
-          onClick={() => switchMode("create")}
-        >
-          Create Loan Request
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "cancel"}
-          className={`${styles.tab} ${mode === "cancel" ? styles.tabActive : ""}`}
-          onClick={() => switchMode("cancel")}
-        >
-          Cancel Loan Request
-        </button>
-      </div>
-
       {!connected ? (
-        <p className={styles.disabledText}>
-          Connect your wallet to create or cancel loan requests.
-        </p>
-      ) : mode === "create" ? (
+        <p className={styles.disabledText}>Connect your wallet to create a loan request.</p>
+      ) : (
         <form className={styles.form} onSubmit={handleCreate}>
           <div className={styles.field}>
             <label className={styles.label} htmlFor="loan-amount">
@@ -154,32 +119,6 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
             {pending ? "Submitting…" : "Create Loan Request"}
           </button>
         </form>
-      ) : (
-        <form className={styles.form} onSubmit={handleCancel}>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="cancel-loan-id">
-              Loan ID
-            </label>
-            <input
-              id="cancel-loan-id"
-              className={styles.input}
-              type="text"
-              inputMode="numeric"
-              placeholder="0"
-              value={cancelLoanId}
-              onChange={(e) => setCancelLoanId(e.target.value)}
-              disabled={pending}
-              autoComplete="off"
-            />
-            <span className={styles.hint}>
-              Only the wallet that created this loan request can cancel it — the contract
-              enforces this, this form does not.
-            </span>
-          </div>
-          <button type="submit" className={styles.dangerButton} disabled={pending}>
-            {pending ? "Submitting…" : "Cancel Loan Request"}
-          </button>
-        </form>
       )}
 
       {connected && status !== "idle" && (
@@ -198,11 +137,11 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
             error={error ? { code: "UNKNOWN", message: error.message } : null}
             explorerUrl={txHash ? testnetExplorerUrl(txHash) : null}
             messages={{
-              submitted: mode === "create" ? "Creating your loan request…" : "Cancelling your loan request…",
+              submitted: "Creating your loan request…",
               confirmed:
-                mode === "create" && result?.loanId !== null && result?.loanId !== undefined
+                result?.loanId !== null && result?.loanId !== undefined
                   ? `Loan request created — ID ${result.loanId}.`
-                  : "Loan request cancelled.",
+                  : "Loan request created.",
             }}
           />
 
@@ -230,11 +169,10 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
               className={styles.secondaryButton}
               onClick={() => {
                 setAmount("");
-                setCancelLoanId("");
                 reset();
               }}
             >
-              {mode === "create" ? "Create another" : "Done"}
+              Create another
             </button>
           )}
         </div>

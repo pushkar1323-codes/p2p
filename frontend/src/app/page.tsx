@@ -35,7 +35,7 @@ const SECTION_META: Record<DashboardSection, { title: string; subtitle: string }
   },
   loans: {
     title: "Loan Registry",
-    subtitle: "Create, cancel and look up loan requests on Stellar Testnet.",
+    subtitle: "Create loan requests and look up any loan by ID on Stellar Testnet.",
   },
   activity: {
     title: "Activity",

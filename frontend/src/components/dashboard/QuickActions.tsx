@@ -80,9 +80,9 @@ export function QuickActions({
     {
       id: "cancel-loan",
       label: "Cancel Loan Request",
-      description: "Cancel a loan request you created",
+      description: "Open one of your loans to cancel it",
       icon: <CancelActionIcon width={18} height={18} />,
-      onClick: () => onNavigate("loans"),
+      onClick: () => onNavigate("my-loans"),
     },
   ];
 
