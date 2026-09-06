@@ -1,0 +1,55 @@
+name: Frontend CI
+
+# L3-P13. Runs the frontend's existing lint/typecheck/test/build
+# commands on every push and pull request — it does not introduce any
+# new checks, just runs the ones already used to verify this project
+# throughout development. Deliberately does not touch the backend or
+# contracts (see backend-ci.yml / contracts-ci.yml), and never
+# deploys or builds a production artifact beyond `next build`'s own
+# output.
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  frontend:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      # Typecheck runs AFTER build, deliberately: this project's
+      # tsconfig relies on Next.js's generated `.next/types` (e.g. the
+      # `LayoutProps` helper type used in `src/app/layout.tsx`), which
+      # only exist once `next build` (or `next dev`) has run at least
+      # once. Running `tsc --noEmit` before any build fails with
+      # "Cannot find name 'LayoutProps'" — not a real type error, just
+      # missing generated types. Building first avoids that false
+      # failure while still running an explicit, separate typecheck
+      # step as its own reported CI check.
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit

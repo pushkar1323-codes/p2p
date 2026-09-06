@@ -1,0 +1,62 @@
+name: Contracts CI
+
+# L3-P13. Runs the Soroban contract workspace's fmt check, clippy
+# (warnings denied), tests, and a release WASM build validation on
+# every push and pull request.
+#
+# Deliberately does NOT deploy anything: no step here calls
+# `stellar contract deploy` or any script in `contracts/scripts/`.
+# Deployment stays a separate, manually triggered process (see
+# `contracts/DEPLOYMENT_SEQUENCE.md`), per 03_ARCHITECTURE.md's CI
+# target and the Level 3 roadmap's "keep contract deployment separate
+# from ordinary CI".
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: contracts
+
+jobs:
+  contracts:
+    name: fmt, clippy, test, wasm build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings denied)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --workspace --locked
+
+      # Validates every contract in the workspace actually compiles
+      # for the target it will eventually be deployed as — catches a
+      # class of error `cargo test`/clippy (host target) cannot, e.g.
+      # `#![no_std]` violations that only surface for wasm32. This is
+      # a build/target check only; it does not deploy the resulting
+      # .wasm files anywhere.
+      - name: Build release WASM (all contracts)
+        run: cargo build --workspace --locked --release --target wasm32-unknown-unknown

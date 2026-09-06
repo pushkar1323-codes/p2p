@@ -1,0 +1,70 @@
+name: Backend CI
+
+# L3-P13. Runs the backend's build and test suite against a real
+# PostgreSQL service container on every push and pull request — some
+# tests (e.g. src/services/eventProcessing.test.ts) exercise real
+# database code via src/db/client.ts, so a live database is required,
+# not optional. The backend currently has no lint script/ESLint
+# config, so none is invented here; this only runs what already
+# exists (npm run build, npm test), plus the schema migration that
+# has to happen first against a fresh database.
+#
+# POSTGRES_PASSWORD below is a fixed, throwaway password for an
+# ephemeral CI-only container that is destroyed at the end of the
+# job — not a real secret, same convention as the non-sensitive
+# placeholder DATABASE_URL already committed in
+# backend/.env.example.
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: backend
+
+env:
+  DATABASE_URL: postgres://p2p_backend:p2p_ci_password@localhost:5432/p2p_backend
+  NODE_ENV: test
+
+jobs:
+  backend:
+    name: Build and test (with PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: p2p_backend
+          POSTGRES_PASSWORD: p2p_ci_password
+          POSTGRES_DB: p2p_backend
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U p2p_backend"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (typecheck + compile)
+        run: npm run build
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Test
+        run: npm test
