@@ -5,7 +5,9 @@ import {
   classifyWriteError,
   contractStateExpiredError,
   isContractWriteError,
+  isEligibilityRejection,
   isLoanRegistryError,
+  NOT_ELIGIBLE_MESSAGE,
   parseLoanStatus,
   resolveConfirmedTxHash,
   resolveOkResult,
@@ -202,6 +204,43 @@ test("isContractWriteError rejects plain Errors, LoanRegistryError-shaped object
   assert.equal(isContractWriteError({ code: "LOAN_NOT_FOUND", message: "x" }), false);
   assert.equal(isContractWriteError(null), false);
   assert.equal(isContractWriteError(undefined), false);
+});
+
+test("isContractWriteError recognizes NOT_ELIGIBLE", () => {
+  assert.equal(
+    isContractWriteError({ code: "NOT_ELIGIBLE", message: NOT_ELIGIBLE_MESSAGE }),
+    true
+  );
+});
+
+// --- isEligibilityRejection ---------------------------------------------
+
+test("isEligibilityRejection matches the real Soroban host-error format for contract error #9", () => {
+  // Exact shape confirmed against this project's own L3-P14 live
+  // Testnet verification (see docs/CURRENT_STATUS.md).
+  assert.equal(
+    isEligibilityRejection('Transaction simulation failed: "HostError: Error(Contract, #9)"'),
+    true
+  );
+});
+
+test("isEligibilityRejection tolerates minor formatting variance (spacing)", () => {
+  assert.equal(isEligibilityRejection("Error(Contract,#9)"), true);
+  assert.equal(isEligibilityRejection("Error( Contract , #9 )"), true);
+});
+
+test("isEligibilityRejection does NOT match a different contract error code", () => {
+  // #8 is EligibilityContractNotConfigured — a real but distinct
+  // failure (misconfiguration, not a rejected borrower) that must
+  // get its own honest message, not this one.
+  assert.equal(isEligibilityRejection("Error(Contract, #8)"), false);
+  assert.equal(isEligibilityRejection("Error(Contract, #1)"), false);
+});
+
+test("isEligibilityRejection does NOT match unrelated failures, even ones mentioning eligibility in passing", () => {
+  assert.equal(isEligibilityRejection("Transaction simulation failed: network timeout"), false);
+  assert.equal(isEligibilityRejection("checking eligibility took too long"), false);
+  assert.equal(isEligibilityRejection(""), false);
 });
 
 // --- resolveConfirmedTxHash ---------------------------------------------

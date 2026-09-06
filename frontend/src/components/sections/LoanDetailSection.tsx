@@ -36,12 +36,14 @@ interface LoanDetailSectionProps {
  * state-aware: it only ever offers an action the contract would
  * actually accept, rather than a generic "cancel by ID" form.
  *
- * Funding is deliberately absent here, not shown-and-disabled — see
- * the note rendered for that exact case below. The currently
- * deployed Testnet `loan_registry` contract predates `fund_loan`
- * (L3-P12) — the local contract has it, the live one doesn't (see
- * `docs/CURRENT_STATUS.md`) — so there's nothing to real to call, and
- * FCP-02 explicitly says not to fake it.
+ * Funding is deliberately not offered here as an action, even though
+ * the currently deployed Testnet `loan_registry` contract
+ * (`fund_loan`, L3-P12) supports it on-chain: no wallet-signed lender
+ * funding flow has been built in this frontend yet. Showing a
+ * "Fund This Loan" button without a real signing flow behind it would
+ * be worse than not showing one — see the neutral note rendered for
+ * that exact case below, and FCP-02's explicit rule against faking a
+ * transaction.
  */
 export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionProps) {
   const { status, data, error, refresh } = useLoanRequest(loanId);
@@ -226,9 +228,8 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
 
               {isOtherPartyOpenLoan && (
                 <p className={styles.hint}>
-                  Funding isn&apos;t available on this loan yet — the currently deployed Testnet contract
-                  doesn&apos;t include lender funding. This will become available once an updated contract
-                  is deployed.
+                  Lender funding is supported by the loan_registry contract, but this app&apos;s
+                  funding flow hasn&apos;t been built yet — you can&apos;t fund this loan here.
                 </p>
               )}
 

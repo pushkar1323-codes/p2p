@@ -79,8 +79,9 @@ export function ProfileSection({ wallet }: ProfileSectionProps) {
       )}
 
       <p className={styles.hint}>
-        Reputation, lending history, and funding stats aren&apos;t shown here yet — this Testnet
-        deployment doesn&apos;t include lender funding or reputation scoring (see Loan Details for why).
+        Reputation, lending history, and funding stats aren&apos;t shown here yet — reputation
+        scoring isn&apos;t deployed on Testnet, and this app doesn&apos;t have a funding UI yet
+        even though the loan_registry contract itself now supports funding (see Loan Details).
       </p>
     </Card>
   );

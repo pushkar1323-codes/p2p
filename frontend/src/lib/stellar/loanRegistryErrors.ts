@@ -160,6 +160,7 @@ export type ContractWriteErrorCode =
   | "INVALID_AMOUNT"
   | "INVALID_LOAN_ID"
   | "REJECTED"
+  | "NOT_ELIGIBLE"
   | "SIMULATION_FAILED"
   | "SUBMISSION_FAILED"
   | "TRANSACTION_FAILED"
@@ -178,6 +179,7 @@ const CONTRACT_WRITE_ERROR_CODES: ContractWriteErrorCode[] = [
   "INVALID_AMOUNT",
   "INVALID_LOAN_ID",
   "REJECTED",
+  "NOT_ELIGIBLE",
   "SIMULATION_FAILED",
   "SUBMISSION_FAILED",
   "TRANSACTION_FAILED",
@@ -194,6 +196,33 @@ export function isContractWriteError(err: unknown): err is ContractWriteError {
     CONTRACT_WRITE_ERROR_CODES.includes((err as { code: unknown }).code as ContractWriteErrorCode)
   );
 }
+
+/**
+ * Detects the specific `BorrowerNotEligible` contract error (error
+ * code 9 — see `contracts/loan_registry/src/error.rs`) inside a raw
+ * Soroban simulation-failure message, so a `create_loan_request`
+ * eligibility rejection can be shown with a specific, honest message
+ * instead of the generic "could not be simulated" fallback.
+ *
+ * Soroban simulation errors surface as a host-error string in the
+ * form `Error(Contract, #9)` (confirmed against this project's own
+ * L3-P14 live Testnet verification — see docs/CURRENT_STATUS.md).
+ * Matches on that exact code only — this is deliberately narrow: it
+ * must not also match `EligibilityContractNotConfigured` (#8) or any
+ * other contract error, since those need their own honest messages,
+ * not this one. Returns `false` (never a guess) for anything else,
+ * including a message that merely mentions eligibility in passing.
+ */
+export function isEligibilityRejection(simulationMessage: string): boolean {
+  return /Error\(\s*Contract\s*,\s*#9\s*\)/.test(simulationMessage);
+}
+
+export const NOT_ELIGIBLE_MESSAGE =
+  "This wallet isn't currently approved to create loan requests. " +
+  "loan_registry only accepts requests from borrower addresses an " +
+  "administrator has allow-listed on the Eligibility Registry — this " +
+  "isn't a bug or a temporary issue. Contact the project administrator " +
+  "if you believe this wallet should be approved.";
 
 /**
  * Generic fallback classifier for contract-write failures: detects

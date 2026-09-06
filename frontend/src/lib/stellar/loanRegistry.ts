@@ -36,7 +36,9 @@ import {
   classifyWriteError,
   contractStateExpiredError,
   isContractWriteError,
+  isEligibilityRejection,
   isLoanRegistryError,
+  NOT_ELIGIBLE_MESSAGE,
   parseLoanStatus,
   resolveConfirmedTxHash,
   resolveOkResult,
@@ -371,6 +373,18 @@ function toContractWriteError(err: unknown): ContractWriteError {
     return { code: "REJECTED", message: "The request was rejected in your wallet." };
   }
   if (err instanceof SimulationFailed) {
+    // create_loan_request's on-chain eligibility check (L3-P07) is
+    // enforced by the Eligibility Registry contract, not this
+    // frontend — this only detects and explains that rejection, it
+    // never bypasses, weakens, or works around it. See
+    // isEligibilityRejection's doc comment.
+    if (isEligibilityRejection(err.message)) {
+      return {
+        code: "NOT_ELIGIBLE",
+        message: NOT_ELIGIBLE_MESSAGE,
+        internal: err.message,
+      };
+    }
     return {
       code: "SIMULATION_FAILED",
       message: "The transaction could not be simulated. Please try again.",
