@@ -52,12 +52,17 @@ export const stellarConfig: StellarConfig = {
     "NEXT_PUBLIC_SOROBAN_RPC_URL",
     "https://soroban-testnet.stellar.org"
   ),
-  // Deployed via contracts/scripts/deploy_testnet.sh (L2-P04). See
-  // contracts/loan_registry/DEPLOYMENTS.md for the full deployment
-  // record. This is a public contract ID, not a secret.
+  // Deployed via contracts/scripts/deploy_testnet.sh, then wired to
+  // eligibility_registry via contracts/scripts/init_loan_registry_testnet.sh
+  // (L3-P14 — see docs/CURRENT_STATUS.md for the full deployment
+  // record: deployer/admin address, all transaction hashes, WASM
+  // hash). This is a public contract ID, not a secret. Previous
+  // (superseded, pre-eligibility) deployment was
+  // CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA — do not
+  // revert to it.
   loanRegistryContractId: requireEnv(
     "NEXT_PUBLIC_LOAN_REGISTRY_CONTRACT_ID",
-    "CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA"
+    "CAI7FGT5ORNLOC25SHOJ7DCZVW66DVEDAZMNGTTHBRZYFYU5ACSHQKCS"
   ),
 };
 
