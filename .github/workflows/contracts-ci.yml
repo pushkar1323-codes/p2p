@@ -27,7 +27,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        # Pinned to 1.75.0, not `stable`: this workspace's Cargo.lock
+        # pins several transitive dependencies to older patch versions
+        # specifically to build under Rust 1.75 (see contracts/Cargo.toml's
+        # top-of-file comment). `stable` currently fails compiling
+        # `ethnum v1.5.0` with E0512 — a real toolchain/dependency
+        # mismatch, not a flaky failure — so this must stay pinned to
+        # the same version verified locally rather than floating.
+        uses: dtolnay/rust-toolchain@1.75.0
         with:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
