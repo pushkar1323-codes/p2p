@@ -2,3 +2,9 @@
 **/test_snapshots/
 .env
 .env.local
+
+# Local deployment records (contract IDs, deployer/admin addresses,
+# tx hashes — no secrets, but per docs/CURRENT_STATUS.md's Git Policy
+# these are local-only and must not be committed; each
+# deploy_*_testnet.sh script appends to its own crate's copy).
+**/DEPLOYMENTS.md
