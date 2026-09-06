@@ -9,11 +9,15 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org)
 [![License](https://img.shields.io/badge/License-Unlicensed-lightgrey?style=flat-square)](#-license)
 
-[Contract Address](#-contract-address--explorer) · [Features](#-features) · [Architecture](#-architecture) · [Getting Started](#-getting-started) · [Roadmap](#-roadmap--future-improvements)
+[App Link](#-app-link) · [Contract Address](#-contract-address--explorer) · [Features](#-features) · [Architecture](#-architecture) · [Getting Started](#-getting-started) · [Demo Video](#-demo-video) · [Roadmap](#-roadmap--future-improvements)
 
 </div>
 
 ---
+
+## 🔗 P2P Deployed Link
+
+**[https://p2p-frontend-bzuk.onrender.com]**
 
 ## 📌 Overview
 
@@ -77,10 +81,30 @@ contract or UI. They're tracked honestly in
 
 ## 🖼️ Screenshots
 
-No screenshots are included in this repository yet. The application is a
-three-section dashboard (Dashboard, Loan Registry, Wallet) reachable by
-running the project locally (see [Getting Started](#-getting-started)) and
-connecting a Testnet-configured wallet from the header.
+<div align="center">
+
+**Deployed contract on Stellar Expert**
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/db7a792f-cbce-49bb-a649-0a3b9a2300a4" />
+
+
+**P2P UI**
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/9898603d-3532-424b-9be4-f26b51a754ab" />
+
+
+**Mobile responsive UI**
+<img width="495" height="901" alt="image" src="https://github.com/user-attachments/assets/5cb793ae-105e-4fd1-aa13-66076cb91b25" />
+
+
+**CI/CD pipeline**
+<img width="1917" height="1076" alt="image" src="https://github.com/user-attachments/assets/6e4ef9ce-487c-48fd-baa1-0797785c19ae" />
+
+
+
+</div>
+
+## 🎬 Demo Video
+
+**[TODO: add demo video link here]**
 
 ## 🏗️ Architecture
 
@@ -416,10 +440,10 @@ CLI's own local identity keystore — never a key committed to a file.
 |---|---|
 | **Network** | Stellar Testnet |
 | **Contract** | `loan_registry` |
-| **Contract address** | `CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA` |
-| **Explorer** | [stellar.expert/explorer/testnet/contract/CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA](https://stellar.expert/explorer/testnet/contract/CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA) |
+| **Contract address** | `CAI7FGT5ORNLOC25SHOJ7DCZVW66DVEDAZMNGTTHBRZYFYU5ACSHQKCS` |
+| **Explorer** | [stellar.expert/explorer/testnet/contract/CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA](https://stellar.expert/explorer/testnet/contract/CAI7FGT5ORNLOC25SHOJ7DCZVW66DVEDAZMNGTTHBRZYFYU5ACSHQKCS) |
 | **Deployer address** | `GCCIWTVKZXF4UBD4HOBDUWFQVEFHLH53DL54SUYAQLMYWKHUXTXBCTMF` |
-| **Deployment transaction** | [`ad347084a8e63828bd9501cfd75bd4e3ab9c00b29d4557e97b05ff9c66d0e3ed`](https://stellar.expert/explorer/testnet/tx/ad347084a8e63828bd9501cfd75bd4e3ab9c00b29d4557e97b05ff9c66d0e3ed) |
+| **Deployment transaction** | [`9ca9423e47fd7de81454a883578f363b41c824b60ebfa0adeba3f1f77b8686e3`](https://stellar.expert/explorer/testnet/tx/9ca9423e47fd7de81454a883578f363b41c824b60ebfa0adeba3f1f77b8686e3) |
 
 No secret key, seed phrase, or other credential is recorded anywhere in
 this repository — only public addresses and public transaction hashes.
