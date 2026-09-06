@@ -16,6 +16,9 @@
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
+  "optionalDependencies": {
+    "bufferutil": "4.1.0"
+  },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
