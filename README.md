@@ -104,7 +104,7 @@ contract or UI. They're tracked honestly in
 
 ## 🎬 Demo Video
 
-**[TODO: add demo video link here]**
+**[https://www.youtube.com/watch?v=o28evMeVKiM]**
 
 ## 🏗️ Architecture
 
