@@ -31,7 +31,8 @@ import { xdr, scValToNative, StrKey } from "@stellar/stellar-sdk";
 
 export type LoanRegistryEvent =
   | { kind: "created"; loanId: number; borrower: string; amount: bigint }
-  | { kind: "cancelled"; loanId: number; borrower: string };
+  | { kind: "cancelled"; loanId: number; borrower: string }
+  | { kind: "funded"; loanId: number; lender: string; token: string; amount: bigint };
 
 /** Pulls the flat list of contract-level `ContractEvent`s out of
  *  either `TransactionMeta` shape. Unknown/older variants (v0–v2,
@@ -61,6 +62,11 @@ function isFromContract(event: xdr.ContractEvent, contractId: string): boolean {
  *   `(loan_id: u64, amount: i128)`.
  * - `cancelled`: topics `(Symbol("cancelled"), borrower)`, data
  *   `loan_id: u64`.
+ * - `funded`: topics `(Symbol("funded"), lender)`, data `(loan_id: u64,
+ *   token: Address, amount: i128)` (L3-P12 — see `events.rs`'s
+ *   `publish_funded`). The second topic is the *lender* here, not the
+ *   borrower — each event's second topic is whichever address
+ *   actually invoked/authorized that specific operation.
  *
  * Returns `null` for anything that doesn't match this exact shape
  * (a different event name, wrong topic/data arity or types) rather
@@ -73,21 +79,31 @@ function parseLoanRegistryEvent(event: xdr.ContractEvent): LoanRegistryEvent | n
   if (topics.length !== 2) return null;
 
   const eventName = scValToNative(topics[0]);
-  const borrower = scValToNative(topics[1]);
-  if (typeof eventName !== "string" || typeof borrower !== "string") return null;
+  const secondTopic = scValToNative(topics[1]);
+  if (typeof eventName !== "string" || typeof secondTopic !== "string") return null;
 
   if (eventName === "created") {
     const decoded = scValToNative(data);
     if (!Array.isArray(decoded) || decoded.length !== 2) return null;
     const [loanId, amount] = decoded;
     if (typeof loanId !== "bigint" || typeof amount !== "bigint") return null;
-    return { kind: "created", loanId: Number(loanId), borrower, amount };
+    return { kind: "created", loanId: Number(loanId), borrower: secondTopic, amount };
   }
 
   if (eventName === "cancelled") {
     const loanId = scValToNative(data);
     if (typeof loanId !== "bigint") return null;
-    return { kind: "cancelled", loanId: Number(loanId), borrower };
+    return { kind: "cancelled", loanId: Number(loanId), borrower: secondTopic };
+  }
+
+  if (eventName === "funded") {
+    const decoded = scValToNative(data);
+    if (!Array.isArray(decoded) || decoded.length !== 3) return null;
+    const [loanId, token, amount] = decoded;
+    if (typeof loanId !== "bigint" || typeof token !== "string" || typeof amount !== "bigint") {
+      return null;
+    }
+    return { kind: "funded", loanId: Number(loanId), lender: secondTopic, token, amount };
   }
 
   return null;

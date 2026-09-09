@@ -5,7 +5,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AddressChip } from "@/components/ui/AddressChip";
 import { RealtimeStatusBadge } from "@/components/realtime/RealtimeStatusBadge";
-import { ActivityIcon, PlusIcon, CancelActionIcon } from "@/components/ui/icons";
+import { ActivityIcon, PlusIcon, CancelActionIcon, SendIcon } from "@/components/ui/icons";
 import { useContractEventStream } from "@/hooks/useContractEventStream";
 import { contractEventUpdateToLoanRegistryEvent } from "@/lib/realtime/loanRegistryRealtime";
 import { stellarConfig } from "@/config/stellar";
@@ -55,7 +55,7 @@ export function ActivitySection() {
         <EmptyState
           icon={<ActivityIcon width={20} height={20} />}
           title="No activity yet"
-          description="Real events (loan created, loan cancelled) will appear here the moment they happen."
+          description="Real events (loan created, loan funded, loan cancelled) will appear here the moment they happen."
         />
       )}
 
@@ -83,11 +83,20 @@ function ActivityRow({ update }: { update: ContractEventUpdate }) {
   const time = new Date(update.occurredAt);
   const timeLabel = Number.isNaN(time.getTime()) ? null : time.toLocaleTimeString();
 
+  const badgeClass =
+    update.eventType === "cancelled"
+      ? styles.iconBadgeMuted
+      : update.eventType === "funded"
+        ? styles.iconBadgeFunded
+        : "";
+
   return (
     <li className={styles.row}>
-      <span className={`${styles.iconBadge} ${update.eventType === "cancelled" ? styles.iconBadgeMuted : ""}`}>
+      <span className={`${styles.iconBadge} ${badgeClass}`}>
         {update.eventType === "cancelled" ? (
           <CancelActionIcon width={14} height={14} />
+        ) : update.eventType === "funded" ? (
+          <SendIcon width={14} height={14} />
         ) : (
           <PlusIcon width={14} height={14} />
         )}
@@ -95,9 +104,18 @@ function ActivityRow({ update }: { update: ContractEventUpdate }) {
       <div className={styles.rowBody}>
         {decoded ? (
           <p className={styles.rowText}>
-            Loan #{decoded.loanId} {decoded.kind === "created" ? "created" : "cancelled"} by{" "}
-            <AddressChip address={decoded.borrower} visibleChars={4} />
-            {decoded.kind === "created" && <> for {decoded.amount.toString()} units</>}
+            {decoded.kind === "funded" ? (
+              <>
+                Loan #{decoded.loanId} funded by <AddressChip address={decoded.lender} visibleChars={4} />{" "}
+                for {decoded.amount.toString()} units
+              </>
+            ) : (
+              <>
+                Loan #{decoded.loanId} {decoded.kind === "created" ? "created" : "cancelled"} by{" "}
+                <AddressChip address={decoded.borrower} visibleChars={4} />
+                {decoded.kind === "created" && <> for {decoded.amount.toString()} units</>}
+              </>
+            )}
           </p>
         ) : (
           <p className={styles.rowText}>

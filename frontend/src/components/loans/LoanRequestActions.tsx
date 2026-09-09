@@ -186,8 +186,12 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
               <span>
                 Confirmed by the contract&apos;s own <code>{result.event.kind}</code> event — loan #
                 {result.event.loanId}
-                {result.event.kind === "created" ? `, amount ${result.event.amount.toString()}` : ""}, borrower{" "}
-                <AddressChip address={result.event.borrower} visibleChars={4} />
+                {result.event.kind === "created" && `, amount ${result.event.amount.toString()}`}
+                {result.event.kind !== "funded" && (
+                  <>
+                    , borrower <AddressChip address={result.event.borrower} visibleChars={4} />
+                  </>
+                )}
               </span>
             </p>
           )}

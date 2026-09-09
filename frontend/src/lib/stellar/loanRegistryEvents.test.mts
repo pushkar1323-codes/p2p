@@ -6,6 +6,8 @@ import { extractLoanRegistryEvents } from "./loanRegistryEvents.ts";
 const CONTRACT_ID = "CAKENBWT2237ASCTOZMFOMQTYWYRXQRMVX7N2OYGH67P7YMJFOD2L7YA";
 const OTHER_CONTRACT_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 const BORROWER = "GCCIWTVKZXF4UBD4HOBDUWFQVEFHLH53DL54SUYAQLMYWKHUXTXBCTMF";
+const LENDER = "GBMCURKBG6BHGRUY7BRAYTYJA5FXLIFG4F5AICOZL2IO3OOST3XVWQCJ";
+const TOKEN = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
 /**
  * These fixtures are built with the real `@stellar/stellar-sdk` XDR
@@ -71,6 +73,18 @@ function cancelledEvent(contractId: string, loanId: number) {
   );
 }
 
+function fundedEvent(contractId: string, loanId: number, token: string, amount: bigint) {
+  return buildContractEvent(
+    contractId,
+    [nativeToScVal("funded", { type: "symbol" }), new Address(LENDER).toScVal()],
+    nativeToScVal([
+      nativeToScVal(loanId, { type: "u64" }),
+      new Address(token).toScVal(),
+      nativeToScVal(amount, { type: "i128" }),
+    ])
+  );
+}
+
 // --- v3 meta shape ------------------------------------------------
 
 test("extracts a created event from v3 meta with loan id, borrower and amount", () => {
@@ -83,6 +97,22 @@ test("extracts a cancelled event from v3 meta with loan id and borrower", () => 
   const meta = metaV3WithEvents([cancelledEvent(CONTRACT_ID, 7)]);
   const events = extractLoanRegistryEvents(meta, CONTRACT_ID);
   assert.deepEqual(events, [{ kind: "cancelled", loanId: 7, borrower: BORROWER }]);
+});
+
+test("extracts a funded event from v3 meta with loan id, lender, token and amount (L3-P12)", () => {
+  const meta = metaV3WithEvents([fundedEvent(CONTRACT_ID, 3, TOKEN, BigInt(2000))]);
+  const events = extractLoanRegistryEvents(meta, CONTRACT_ID);
+  assert.deepEqual(events, [{ kind: "funded", loanId: 3, lender: LENDER, token: TOKEN, amount: BigInt(2000) }]);
+});
+
+test("ignores a malformed funded event (wrong data arity)", () => {
+  const event = buildContractEvent(
+    CONTRACT_ID,
+    [nativeToScVal("funded", { type: "symbol" }), new Address(LENDER).toScVal()],
+    nativeToScVal([nativeToScVal(1, { type: "u64" }), nativeToScVal(BigInt(100), { type: "i128" })]) // missing token
+  );
+  const meta = metaV3WithEvents([event]);
+  assert.deepEqual(extractLoanRegistryEvents(meta, CONTRACT_ID), []);
 });
 
 test("v3 meta with no sorobanMeta yields no events, without throwing", () => {
@@ -105,6 +135,12 @@ test("extracts a cancelled event from v4 meta (per-operation events)", () => {
   assert.deepEqual(events, [{ kind: "cancelled", loanId: 12, borrower: BORROWER }]);
 });
 
+test("extracts a funded event from v4 meta (per-operation events)", () => {
+  const meta = metaV4WithEvents([fundedEvent(CONTRACT_ID, 9, TOKEN, BigInt(750))]);
+  const events = extractLoanRegistryEvents(meta, CONTRACT_ID);
+  assert.deepEqual(events, [{ kind: "funded", loanId: 9, lender: LENDER, token: TOKEN, amount: BigInt(750) }]);
+});
+
 // --- filtering ------------------------------------------------------
 
 test("ignores events from a different contract id", () => {
@@ -115,7 +151,7 @@ test("ignores events from a different contract id", () => {
 test("ignores an event with an unrecognized topic name", () => {
   const event = buildContractEvent(
     CONTRACT_ID,
-    [nativeToScVal("funded", { type: "symbol" }), new Address(BORROWER).toScVal()],
+    [nativeToScVal("repaid", { type: "symbol" }), new Address(BORROWER).toScVal()],
     nativeToScVal(1, { type: "u64" })
   );
   const meta = metaV3WithEvents([event]);

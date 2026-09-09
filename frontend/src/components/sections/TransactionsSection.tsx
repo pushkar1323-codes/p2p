@@ -77,7 +77,7 @@ export function TransactionsSection() {
         <EmptyState
           icon={<ClockIcon width={20} height={20} />}
           title="No transactions recorded yet"
-          description="Loan requests created or cancelled on this contract will appear here once recorded by the backend."
+          description="Loan requests created, funded, or cancelled on this contract will appear here once recorded by the backend."
         />
       )}
 
@@ -98,7 +98,11 @@ export function TransactionsSection() {
                   <td>
                     <span
                       className={`${styles.eventBadge} ${
-                        event.eventType === "cancelled" ? styles.eventBadgeMuted : ""
+                        event.eventType === "cancelled"
+                          ? styles.eventBadgeMuted
+                          : event.eventType === "funded"
+                            ? styles.eventBadgeFunded
+                            : ""
                       }`}
                     >
                       {event.eventType}

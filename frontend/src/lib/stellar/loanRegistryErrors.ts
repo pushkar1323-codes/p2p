@@ -19,7 +19,7 @@ import { mapWalletApiError } from "../errors/appError.ts";
 
 // --- Contract reads (L2-P05) -----------------------------------------------
 
-export type LoanStatus = "Open" | "Cancelled";
+export type LoanStatus = "Open" | "Cancelled" | "Funded";
 
 export interface LoanRequest {
   loanId: number;
@@ -28,7 +28,27 @@ export interface LoanRequest {
   status: LoanStatus;
 }
 
-export type LoanRegistryErrorCode = "LOAN_NOT_FOUND" | "NETWORK_ERROR" | "STATE_EXPIRED" | "UNKNOWN";
+/**
+ * A loan's funding record — `loan_registry`'s `get_funding(loan_id)`
+ * (L3-P12). Mirrors `contracts/loan_registry/src/types.rs`'s
+ * `Funding` struct exactly: loan id, the lender who funded it, the
+ * token they funded it with, and the amount transferred (always
+ * exactly the loan's own requested amount — partial funding isn't
+ * supported by the contract).
+ */
+export interface Funding {
+  loanId: number;
+  lender: string;
+  token: string;
+  amount: bigint;
+}
+
+export type LoanRegistryErrorCode =
+  | "LOAN_NOT_FOUND"
+  | "FUNDING_NOT_FOUND"
+  | "NETWORK_ERROR"
+  | "STATE_EXPIRED"
+  | "UNKNOWN";
 
 export interface LoanRegistryError {
   code: LoanRegistryErrorCode;
@@ -56,17 +76,35 @@ export interface LoanRegistryError {
  * appears in practice.
  */
 export function parseLoanStatus(raw: unknown): LoanStatus {
-  if (raw === "Open" || raw === "Cancelled") {
+  if (raw === "Open" || raw === "Cancelled" || raw === "Funded") {
     return raw;
   }
   if (typeof raw === "object" && raw !== null && "tag" in raw) {
     const tag = (raw as { tag: unknown }).tag;
-    if (tag === "Open" || tag === "Cancelled") return tag;
+    if (tag === "Open" || tag === "Cancelled" || tag === "Funded") return tag;
   }
-  if (Array.isArray(raw) && (raw[0] === "Open" || raw[0] === "Cancelled")) {
+  if (
+    Array.isArray(raw) &&
+    (raw[0] === "Open" || raw[0] === "Cancelled" || raw[0] === "Funded")
+  ) {
     return raw[0];
   }
   throw new Error(`Unrecognized LoanStatus value: ${JSON.stringify(raw)}`);
+}
+
+/**
+ * Whether Loan Details should offer a Fund Loan action for the
+ * currently connected wallet: the loan must be `Open`, and the
+ * connected wallet must NOT be this loan's own borrower (L3-P12
+ * correction — mirrors the contract's own `LenderIsBorrower`/
+ * `LoanNotOpen` checks in `fund_loan`, so the UI never offers an
+ * action the contract would reject; the contract itself remains the
+ * actual security boundary regardless of what this returns).
+ * Extracted as a pure function specifically so this condition is
+ * directly unit-testable without rendering `LoanDetailSection`.
+ */
+export function canFundLoan(status: LoanStatus, isBorrowerOfThisLoan: boolean): boolean {
+  return status === "Open" && !isBorrowerOfThisLoan;
 }
 
 /**
@@ -145,7 +183,7 @@ export function isLoanRegistryError(err: unknown): err is LoanRegistryError {
     err !== null &&
     "code" in err &&
     "message" in err &&
-    ["LOAN_NOT_FOUND", "NETWORK_ERROR", "STATE_EXPIRED", "UNKNOWN"].includes(
+    ["LOAN_NOT_FOUND", "FUNDING_NOT_FOUND", "NETWORK_ERROR", "STATE_EXPIRED", "UNKNOWN"].includes(
       (err as { code: unknown }).code as string
     )
   );
@@ -162,6 +200,9 @@ export type ContractWriteErrorCode =
   | "REJECTED"
   | "NOT_ELIGIBLE"
   | "BLOCKED"
+  | "LENDER_IS_BORROWER"
+  | "LOAN_NOT_OPEN_FOR_FUNDING"
+  | "FUNDING_AMOUNT_MISMATCH"
   | "SIMULATION_FAILED"
   | "SUBMISSION_FAILED"
   | "TRANSACTION_FAILED"
@@ -182,6 +223,9 @@ const CONTRACT_WRITE_ERROR_CODES: ContractWriteErrorCode[] = [
   "REJECTED",
   "NOT_ELIGIBLE",
   "BLOCKED",
+  "LENDER_IS_BORROWER",
+  "LOAN_NOT_OPEN_FOR_FUNDING",
+  "FUNDING_AMOUNT_MISMATCH",
   "SIMULATION_FAILED",
   "SUBMISSION_FAILED",
   "TRANSACTION_FAILED",
@@ -224,6 +268,55 @@ export const NOT_ELIGIBLE_MESSAGE =
   "loan_registry requires borrowers to register with the Eligibility " +
   "Registry first (a one-time, self-service transaction — no " +
   "administrator involved) before it will accept a loan request.";
+
+/**
+ * Detects `fund_loan`'s `LenderIsBorrower` contract error (error code
+ * 12 — see `contracts/loan_registry/src/error.rs`) inside a raw
+ * Soroban simulation-failure message. Only ever applied within this
+ * file's own `fundLoan`/`loanRegistry.ts` write-error mapping — it
+ * uses `loan_registry`'s own error numbering, so (unlike
+ * `eligibilityRegistryErrors.ts`'s detectors) there is no
+ * cross-contract ambiguity risk here.
+ */
+export function isLenderIsBorrowerRejection(simulationMessage: string): boolean {
+  return /Error\(\s*Contract\s*,\s*#12\s*\)/.test(simulationMessage);
+}
+
+export const LENDER_IS_BORROWER_MESSAGE =
+  "You can't fund your own loan request. Funding is only available " +
+  "from a different wallet than the one that created this loan.";
+
+/**
+ * Detects `LoanNotOpen` (error code 4) specifically as it can be
+ * returned by `fund_loan` — the loan has already been funded or
+ * cancelled (by someone else, in a race between this wallet opening
+ * the loan and submitting a funding transaction) since it was last
+ * read. The UI only ever offers Fund Loan on a loan already known to
+ * be `Open`, so reaching this is a genuine race, not a UI bug — the
+ * message reflects that rather than implying something is broken.
+ */
+export function isLoanNotOpenForFundingRejection(simulationMessage: string): boolean {
+  return /Error\(\s*Contract\s*,\s*#4\s*\)/.test(simulationMessage);
+}
+
+export const LOAN_NOT_OPEN_FOR_FUNDING_MESSAGE =
+  "This loan is no longer open for funding — it may have just been " +
+  "funded or cancelled by someone else. Refresh to see its current status.";
+
+/**
+ * Detects `FundingAmountMismatch` (error code 13). The frontend never
+ * lets a lender enter or edit the funding amount — it always sends
+ * exactly the loan's own requested amount — so this should not be
+ * reachable in normal use; handled anyway for an honest message
+ * rather than a generic fallback if it ever is (e.g. stale read data).
+ */
+export function isFundingAmountMismatchRejection(simulationMessage: string): boolean {
+  return /Error\(\s*Contract\s*,\s*#13\s*\)/.test(simulationMessage);
+}
+
+export const FUNDING_AMOUNT_MISMATCH_MESSAGE =
+  "The funding amount didn't exactly match this loan's requested " +
+  "amount. Refresh the page and try again.";
 
 /**
  * Generic fallback classifier for contract-write failures: detects

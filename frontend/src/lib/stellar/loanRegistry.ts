@@ -37,17 +37,29 @@ import {
   contractStateExpiredError,
   isContractWriteError,
   isEligibilityRejection,
+  isFundingAmountMismatchRejection,
+  isLenderIsBorrowerRejection,
+  isLoanNotOpenForFundingRejection,
   isLoanRegistryError,
+  FUNDING_AMOUNT_MISMATCH_MESSAGE,
+  LENDER_IS_BORROWER_MESSAGE,
+  LOAN_NOT_OPEN_FOR_FUNDING_MESSAGE,
   NOT_ELIGIBLE_MESSAGE,
   parseLoanStatus,
   resolveConfirmedTxHash,
   resolveOkResult,
 } from "./loanRegistryErrors";
-import type { ContractWriteError, LoanRegistryError, LoanRequest } from "./loanRegistryErrors";
+import type {
+  ContractWriteError,
+  Funding,
+  LoanRegistryError,
+  LoanRequest,
+} from "./loanRegistryErrors";
 
 export type {
   LoanStatus,
   LoanRequest,
+  Funding,
   LoanRegistryErrorCode,
   LoanRegistryError,
   ContractWriteStatus,
@@ -78,6 +90,13 @@ interface LoanRegistryContractApi {
     args: { borrower: string; loan_id: bigint },
     options?: contract.MethodOptions
   ): Promise<contract.AssembledTransaction<contract.Result<null>>>;
+  fund_loan(
+    args: { lender: string; loan_id: bigint; token: string; amount: bigint },
+    options?: contract.MethodOptions
+  ): Promise<contract.AssembledTransaction<contract.Result<null>>>;
+  get_funding(args: { loan_id: bigint }): Promise<{
+    result: RustResult<RawFunding, { message: string }>;
+  }>;
 }
 
 interface RustResult<T, E> {
@@ -91,6 +110,13 @@ interface RawLoanRequest {
   borrower: string;
   amount: bigint;
   status: unknown;
+}
+
+interface RawFunding {
+  loan_id: bigint;
+  lender: string;
+  token: string;
+  amount: bigint;
 }
 
 let clientPromise: Promise<contract.Client & LoanRegistryContractApi> | null = null;
@@ -201,6 +227,40 @@ export async function getLoanRequest(loanId: number): Promise<LoanRequest> {
   }
 }
 
+/**
+ * Reads a loan's funding record by loan id — `loan_registry`'s
+ * `get_funding(loan_id)` (L3-P12). Throws a `LoanRegistryError` with
+ * code `FUNDING_NOT_FOUND` if the contract returns
+ * `Err(Error::FundingNotFound)` (i.e. the loan has never been
+ * funded) — same shape as `getLoanRequest`'s `LOAN_NOT_FOUND` handling.
+ */
+export async function getFunding(loanId: number): Promise<Funding> {
+  try {
+    const client = await getClient();
+    const { result } = await client.get_funding({ loan_id: BigInt(loanId) });
+
+    if (result.isErr()) {
+      throw {
+        code: "FUNDING_NOT_FOUND",
+        message: `Loan ${loanId} hasn't been funded yet.`,
+      } satisfies LoanRegistryError;
+    }
+
+    const raw = result.unwrap();
+    return {
+      loanId,
+      lender: raw.lender,
+      token: raw.token,
+      amount: raw.amount,
+    };
+  } catch (err) {
+    if (isLoanRegistryError(err)) throw err;
+    // See getLoanCount()'s comment above.
+    console.error("[loan_registry] get_funding() failed:", err);
+    throw toReadError(err);
+  }
+}
+
 // --- Writes (L2-P06) ---------------------------------------------
 
 export interface CreateLoanRequestParams {
@@ -304,6 +364,63 @@ export async function cancelLoanRequest(
   }
 }
 
+export interface FundLoanParams {
+  /** The connected wallet's address — the transaction's fee-paying
+   *  source account, and the loan_registry `lender` parameter (L3-P12).
+   *  Always derived from the connected wallet, never from user-entered
+   *  form data — same rule `createLoanRequest`'s `sourceAddress`
+   *  already follows. */
+  sourceAddress: string;
+  loanId: number;
+  /** The token to fund with — a SEP-41-compatible contract address.
+   *  The current contract accepts any such token; this app always
+   *  passes `stellarConfig.nativeXlmSacContractId` (see
+   *  `config/stellar.ts`) as its one supported funding asset. */
+  token: string;
+  /** Must exactly equal the loan's own requested amount — the
+   *  contract enforces this (`FundingAmountMismatch` otherwise;
+   *  partial funding is not supported). Callers must pass the loan's
+   *  actual `LoanRequest.amount`, never a value the lender typed in;
+   *  the UI never offers an editable amount field for this reason. */
+  amount: bigint;
+}
+
+export interface FundLoanResult {
+  txHash: string;
+  /** Same as `CreateLoanRequestResult.event`, for the `funded` event. */
+  event: LoanRegistryEvent | null;
+}
+
+/**
+ * Funds an open loan request — `loan_registry`'s `fund_loan(lender,
+ * loan_id, token, amount)` (L3-P12). Same
+ * build/simulate/sign/submit/confirm flow as `createLoanRequest`/
+ * `cancelLoanRequest`, and resolves only once the transaction is
+ * actually confirmed on Testnet — never call this and mark a loan
+ * `Funded` in the UI before this promise resolves.
+ */
+export async function fundLoan(params: FundLoanParams): Promise<FundLoanResult> {
+  const { sourceAddress, loanId, token, amount } = params;
+  try {
+    const client = await getClient();
+    const assembled = await client.fund_loan(
+      { lender: sourceAddress, loan_id: BigInt(loanId), token, amount },
+      { publicKey: sourceAddress, signTransaction: signWithSelectedWallet }
+    );
+    const sent = await assembled.signAndSend();
+    const txHash = requireConfirmedTxHash(sent);
+    requireOkResult(
+      sent.result,
+      "This loan could not be funded — it may no longer be open (already funded or cancelled), or this wallet may be the loan's own borrower."
+    );
+    return { txHash, event: extractConfirmedEvent(sent, "funded") };
+  } catch (err) {
+    // See getLoanCount()'s comment above.
+    console.error("[loan_registry] fund_loan() failed:", err);
+    throw toContractWriteError(err);
+  }
+}
+
 /**
  * Decodes the confirmed transaction's `loan_registry` event (L2-P08),
  * from data `signAndSend()` already fetched — no extra RPC call. Only
@@ -382,6 +499,31 @@ function toContractWriteError(err: unknown): ContractWriteError {
       return {
         code: "NOT_ELIGIBLE",
         message: NOT_ELIGIBLE_MESSAGE,
+        internal: err.message,
+      };
+    }
+    // The three checks below are all fund_loan-specific (L3-P12) —
+    // see each detector's own doc comment in loanRegistryErrors.ts.
+    // None of these weaken or bypass fund_loan's own on-chain checks;
+    // they only detect and explain a rejection that already happened.
+    if (isLenderIsBorrowerRejection(err.message)) {
+      return {
+        code: "LENDER_IS_BORROWER",
+        message: LENDER_IS_BORROWER_MESSAGE,
+        internal: err.message,
+      };
+    }
+    if (isLoanNotOpenForFundingRejection(err.message)) {
+      return {
+        code: "LOAN_NOT_OPEN_FOR_FUNDING",
+        message: LOAN_NOT_OPEN_FOR_FUNDING_MESSAGE,
+        internal: err.message,
+      };
+    }
+    if (isFundingAmountMismatchRejection(err.message)) {
+      return {
+        code: "FUNDING_AMOUNT_MISMATCH",
+        message: FUNDING_AMOUNT_MISMATCH_MESSAGE,
         internal: err.message,
       };
     }

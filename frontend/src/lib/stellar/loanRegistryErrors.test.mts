@@ -6,7 +6,14 @@ import {
   contractStateExpiredError,
   isContractWriteError,
   isEligibilityRejection,
+  isFundingAmountMismatchRejection,
+  isLenderIsBorrowerRejection,
+  isLoanNotOpenForFundingRejection,
   isLoanRegistryError,
+  canFundLoan,
+  FUNDING_AMOUNT_MISMATCH_MESSAGE,
+  LENDER_IS_BORROWER_MESSAGE,
+  LOAN_NOT_OPEN_FOR_FUNDING_MESSAGE,
   NOT_ELIGIBLE_MESSAGE,
   parseLoanStatus,
   resolveConfirmedTxHash,
@@ -18,20 +25,31 @@ import {
 test("parseLoanStatus accepts a plain string shape", () => {
   assert.equal(parseLoanStatus("Open"), "Open");
   assert.equal(parseLoanStatus("Cancelled"), "Cancelled");
+  // L3-P12 correction: "Funded" is now a real, expected status — the
+  // currently deployed contract can genuinely return it (fund_loan
+  // exists and is wired to a real frontend flow now), not just an
+  // unrecognized value to reject.
+  assert.equal(parseLoanStatus("Funded"), "Funded");
 });
 
 test("parseLoanStatus accepts a {tag} object shape (generated TS bindings convention)", () => {
   assert.equal(parseLoanStatus({ tag: "Open", values: undefined }), "Open");
   assert.equal(parseLoanStatus({ tag: "Cancelled" }), "Cancelled");
+  assert.equal(parseLoanStatus({ tag: "Funded" }), "Funded");
 });
 
 test("parseLoanStatus accepts a [tag] array shape", () => {
   assert.equal(parseLoanStatus(["Open"]), "Open");
   assert.equal(parseLoanStatus(["Cancelled"]), "Cancelled");
+  assert.equal(parseLoanStatus(["Funded"]), "Funded");
 });
 
 test("parseLoanStatus throws on an unrecognized value rather than silently guessing", () => {
-  assert.throws(() => parseLoanStatus("Funded"));
+  // A status the deployed contract does not (yet) return at all —
+  // see contracts/loan_registry/src/types.rs's full LoanStatus enum
+  // (Repaying/Repaid/Defaulted exist on-chain but are explicitly out
+  // of this task's scope, per L3-P12's own scope control).
+  assert.throws(() => parseLoanStatus("Repaying"));
   assert.throws(() => parseLoanStatus(null));
   assert.throws(() => parseLoanStatus(42));
   assert.throws(() => parseLoanStatus({ tag: "SomethingElse" }));
@@ -129,6 +147,13 @@ test("isLoanRegistryError recognizes a well-formed LoanRegistryError", () => {
 
 test("isLoanRegistryError recognizes the STATE_EXPIRED code", () => {
   assert.equal(isLoanRegistryError({ code: "STATE_EXPIRED", message: "x" }), true);
+});
+
+test("isLoanRegistryError recognizes the FUNDING_NOT_FOUND code (L3-P12)", () => {
+  assert.equal(
+    isLoanRegistryError({ code: "FUNDING_NOT_FOUND", message: "Loan 5 hasn't been funded yet." }),
+    true
+  );
 });
 
 test("isLoanRegistryError rejects plain Errors and other shapes", () => {
@@ -241,6 +266,86 @@ test("isEligibilityRejection does NOT match unrelated failures, even ones mentio
   assert.equal(isEligibilityRejection("Transaction simulation failed: network timeout"), false);
   assert.equal(isEligibilityRejection("checking eligibility took too long"), false);
   assert.equal(isEligibilityRejection(""), false);
+});
+
+// --- canFundLoan (L3-P12) ---------------------------------------------
+
+test("canFundLoan is true for an Open loan and a non-borrower wallet", () => {
+  assert.equal(canFundLoan("Open", false), true);
+});
+
+test("canFundLoan is false for the loan's own borrower, even if Open", () => {
+  assert.equal(canFundLoan("Open", true), false);
+});
+
+test("canFundLoan is false for a Cancelled loan, regardless of borrower status", () => {
+  assert.equal(canFundLoan("Cancelled", false), false);
+  assert.equal(canFundLoan("Cancelled", true), false);
+});
+
+test("canFundLoan is false for an already-Funded loan, regardless of borrower status", () => {
+  assert.equal(canFundLoan("Funded", false), false);
+  assert.equal(canFundLoan("Funded", true), false);
+});
+
+// --- fund_loan rejection detectors (L3-P12) ---------------------------------------------
+
+test("isLenderIsBorrowerRejection matches contract error #12", () => {
+  assert.equal(
+    isLenderIsBorrowerRejection('Transaction simulation failed: "HostError: Error(Contract, #12)"'),
+    true
+  );
+  assert.equal(isLenderIsBorrowerRejection("Error(Contract, #4)"), false);
+  assert.equal(isLenderIsBorrowerRejection(""), false);
+});
+
+test("isLoanNotOpenForFundingRejection matches contract error #4", () => {
+  assert.equal(
+    isLoanNotOpenForFundingRejection('Transaction simulation failed: "HostError: Error(Contract, #4)"'),
+    true
+  );
+  assert.equal(isLoanNotOpenForFundingRejection("Error(Contract, #12)"), false);
+  assert.equal(isLoanNotOpenForFundingRejection(""), false);
+});
+
+test("isFundingAmountMismatchRejection matches contract error #13", () => {
+  assert.equal(
+    isFundingAmountMismatchRejection('Transaction simulation failed: "HostError: Error(Contract, #13)"'),
+    true
+  );
+  assert.equal(isFundingAmountMismatchRejection("Error(Contract, #4)"), false);
+  assert.equal(isFundingAmountMismatchRejection(""), false);
+});
+
+test("fund_loan rejection messages are real, non-empty, honest text", () => {
+  for (const message of [
+    LENDER_IS_BORROWER_MESSAGE,
+    LOAN_NOT_OPEN_FOR_FUNDING_MESSAGE,
+    FUNDING_AMOUNT_MISMATCH_MESSAGE,
+  ]) {
+    assert.ok(message.length > 0);
+  }
+});
+
+test("isContractWriteError recognizes all three new fund_loan error codes", () => {
+  assert.equal(
+    isContractWriteError({ code: "LENDER_IS_BORROWER", message: LENDER_IS_BORROWER_MESSAGE }),
+    true
+  );
+  assert.equal(
+    isContractWriteError({
+      code: "LOAN_NOT_OPEN_FOR_FUNDING",
+      message: LOAN_NOT_OPEN_FOR_FUNDING_MESSAGE,
+    }),
+    true
+  );
+  assert.equal(
+    isContractWriteError({
+      code: "FUNDING_AMOUNT_MISMATCH",
+      message: FUNDING_AMOUNT_MISMATCH_MESSAGE,
+    }),
+    true
+  );
 });
 
 // --- resolveConfirmedTxHash ---------------------------------------------

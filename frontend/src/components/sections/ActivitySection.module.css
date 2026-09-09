@@ -43,6 +43,11 @@
   color: var(--p2p-red-600);
 }
 
+.iconBadgeFunded {
+  background: var(--p2p-purple-50);
+  color: var(--p2p-purple-600);
+}
+
 .rowBody {
   flex: 1;
   min-width: 0;

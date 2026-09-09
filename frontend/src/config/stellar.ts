@@ -22,6 +22,7 @@ interface StellarConfig {
   sorobanRpcUrl: string;
   loanRegistryContractId: string;
   eligibilityRegistryContractId: string;
+  nativeXlmSacContractId: string;
 }
 
 function requireEnv(name: string, fallback?: string): string {
@@ -83,6 +84,21 @@ export const stellarConfig: StellarConfig = {
   eligibilityRegistryContractId: requireEnv(
     "NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID",
     "CDH4ZPP6SGETTVINFJCKL2JUMRC7MMS7ANLRS4DNWEHRRUC52AFIY6AD"
+  ),
+  // Testnet's native XLM asset, represented as a Stellar Asset
+  // Contract — NOT a contract this project deployed. Every Stellar
+  // network already has this contract for its native asset; obtained
+  // via `stellar contract id asset --network testnet --asset native`
+  // (verified value, provided directly for this task — L3-P12
+  // funding correction). This is the one token this app currently
+  // supports for lender funding (`fund_loan`'s `token` parameter
+  // accepts any SEP-41 token; the contract itself does not pin one —
+  // this app does, for a coherent UI, since every Testnet wallet
+  // already holds XLM with no separate faucet/minting step needed).
+  // Public contract ID, not a secret.
+  nativeXlmSacContractId: requireEnv(
+    "NEXT_PUBLIC_NATIVE_XLM_SAC_CONTRACT_ID",
+    "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
   ),
 };
 

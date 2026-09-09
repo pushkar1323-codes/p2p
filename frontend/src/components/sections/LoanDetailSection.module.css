@@ -156,6 +156,16 @@
   background: var(--p2p-red-50);
 }
 
+.fundingErrorText {
+  display: flex;
+  align-items: center;
+  gap: var(--p2p-space-2);
+  font-size: var(--p2p-text-sm);
+  color: var(--p2p-text-secondary);
+  font-family: var(--font-geist-sans);
+  font-weight: 400;
+}
+
 .syncBadge {
   display: inline-flex;
   align-items: center;

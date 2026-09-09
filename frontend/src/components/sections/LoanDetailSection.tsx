@@ -8,15 +8,18 @@ import { Spinner } from "@/components/ui/Spinner";
 import { AddressChip } from "@/components/ui/AddressChip";
 import { RealtimeStatusBadge } from "@/components/realtime/RealtimeStatusBadge";
 import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
+import { FundLoanAction } from "@/components/loans/FundLoanAction";
 import { ArrowLeftIcon, SearchIcon, RefreshIcon, CheckCircleIcon } from "@/components/ui/icons";
 import { TransactionFeedback } from "@/components/transaction/TransactionFeedback";
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
 import { useLoanRequest } from "@/hooks/useLoanRequest";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
+import { useFunding } from "@/hooks/useFunding";
 import { useContractEventStream } from "@/hooks/useContractEventStream";
 import { contractEventUpdateToLoanRegistryEvent } from "@/lib/realtime/loanRegistryRealtime";
 import { reportConfirmedLoanEvent } from "@/lib/backend/eventsApi";
+import { canFundLoan } from "@/lib/stellar/loanRegistryErrors";
 import { stellarConfig } from "@/config/stellar";
 import type { UseWalletResult } from "@/hooks/useWallet";
 import type { ContractEventUpdate } from "@/lib/realtime/types";
@@ -36,14 +39,14 @@ interface LoanDetailSectionProps {
  * state-aware: it only ever offers an action the contract would
  * actually accept, rather than a generic "cancel by ID" form.
  *
- * Funding is deliberately not offered here as an action, even though
- * the currently deployed Testnet `loan_registry` contract
- * (`fund_loan`, L3-P12) supports it on-chain: no wallet-signed lender
- * funding flow has been built in this frontend yet. Showing a
- * "Fund This Loan" button without a real signing flow behind it would
- * be worse than not showing one — see the neutral note rendered for
- * that exact case below, and FCP-02's explicit rule against faking a
- * transaction.
+ * Funding (L3-P12 correction): a connected wallet that is NOT this
+ * loan's borrower sees a real Fund Loan action once the loan is
+ * `Open` — `FundLoanAction`, a genuine wallet-signed
+ * `fund_loan(lender, loan_id, token, amount)` transaction, exact-full
+ * funding only, never editable, never shown as succeeded before the
+ * transaction actually confirms. Once `Funded`, this page reads and
+ * displays the real funding record via `get_funding` (`useFunding`
+ * below) rather than inferring it from local state.
  */
 export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionProps) {
   const { status, data, error, refresh } = useLoanRequest(loanId);
@@ -51,6 +54,7 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
 
   const connected = wallet.status === "connected";
   const write = useLoanRegistryWrite(connected ? wallet.address : null);
+  const funding = useFunding(data?.status === "Funded" ? loanId : null);
 
   // Own SSE subscription (this section isn't nested inside
   // LoanRegistrySection) — same event-driven re-read pattern as
@@ -105,7 +109,7 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
   const notFound = status === "error" && error?.code === "LOAN_NOT_FOUND";
   const isBorrower = connected && data?.borrower === wallet.address;
   const canCancel = isBorrower && data?.status === "Open";
-  const isOtherPartyOpenLoan = data?.status === "Open" && !isBorrower;
+  const isOtherPartyOpenLoan = data ? canFundLoan(data.status, isBorrower) : false;
 
   return (
     <div>
@@ -185,6 +189,43 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
                   <LoanStatusBadge status={data.status} />
                 </dd>
               </div>
+              {data.status === "Funded" && funding.status === "loaded" && funding.data && (
+                <>
+                  <div className={styles.detailRow}>
+                    <dt>Lender</dt>
+                    <dd>
+                      <AddressChip address={funding.data.lender} />
+                    </dd>
+                  </div>
+                  <div className={styles.detailRow}>
+                    <dt>Funded amount</dt>
+                    <dd>
+                      {funding.data.amount.toString()}
+                      <span className={styles.unitNote}>contract units</span>
+                    </dd>
+                  </div>
+                </>
+              )}
+              {data.status === "Funded" && funding.status === "loading" && (
+                <div className={styles.detailRow}>
+                  <dt>Funding record</dt>
+                  <dd>
+                    <Spinner label="Loading…" />
+                  </dd>
+                </div>
+              )}
+              {data.status === "Funded" && funding.status === "error" && funding.error && (
+                <div className={styles.detailRow}>
+                  <dt>Funding record</dt>
+                  <dd className={styles.fundingErrorText}>
+                    {funding.error.message}{" "}
+                    <button type="button" className={styles.retryButton} onClick={funding.refresh}>
+                      <RefreshIcon width={12} height={12} />
+                      Retry
+                    </button>
+                  </dd>
+                </div>
+              )}
             </dl>
 
             <div className={styles.actions}>
@@ -226,14 +267,19 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
                 <p className={styles.hint}>Connect your wallet to see available actions for this loan.</p>
               )}
 
-              {isOtherPartyOpenLoan && (
-                <p className={styles.hint}>
-                  Lender funding is supported by the loan_registry contract, but this app&apos;s
-                  funding flow hasn&apos;t been built yet — you can&apos;t fund this loan here.
-                </p>
+              {isOtherPartyOpenLoan && wallet.address && (
+                <FundLoanAction
+                  loanId={loanId}
+                  amount={data.amount}
+                  token={stellarConfig.nativeXlmSacContractId}
+                  lenderAddress={wallet.address}
+                  write={write}
+                  onFunded={refresh}
+                />
               )}
 
               {data.status === "Cancelled" && <p className={styles.hint}>This loan request was cancelled — it&apos;s in its final state.</p>}
+              {data.status === "Funded" && <p className={styles.hint}>This loan has already been funded — it&apos;s in its final state.</p>}
             </div>
           </>
         )}

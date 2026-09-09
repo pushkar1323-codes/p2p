@@ -153,7 +153,14 @@ export async function reportConfirmedLoanEvent(input: ReportConfirmedLoanEventIn
   const payload =
     event.kind === "created"
       ? { loanId: event.loanId, borrower: event.borrower, amount: event.amount.toString() }
-      : { loanId: event.loanId, borrower: event.borrower };
+      : event.kind === "funded"
+        ? {
+            loanId: event.loanId,
+            lender: event.lender,
+            token: event.token,
+            amount: event.amount.toString(),
+          }
+        : { loanId: event.loanId, borrower: event.borrower };
 
   try {
     const response = await fetch(eventsHistoryUrl(), {

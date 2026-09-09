@@ -37,6 +37,7 @@ export function ProfileSection({ wallet }: ProfileSectionProps) {
 
   const myLoans = filterLoansByBorrower(list.data?.loans ?? [], wallet.address);
   const openCount = myLoans.filter((loan) => loan.status === "Open").length;
+  const fundedCount = myLoans.filter((loan) => loan.status === "Funded").length;
   const cancelledCount = myLoans.filter((loan) => loan.status === "Cancelled").length;
   const loaded = list.status === "loaded";
 
@@ -67,6 +68,10 @@ export function ProfileSection({ wallet }: ProfileSectionProps) {
           <span className={styles.statLabel}>Currently open</span>
         </div>
         <div className={styles.stat}>
+          <span className={styles.statValue}>{loaded ? fundedCount : "—"}</span>
+          <span className={styles.statLabel}>Funded</span>
+        </div>
+        <div className={styles.stat}>
           <span className={styles.statValue}>{loaded ? cancelledCount : "—"}</span>
           <span className={styles.statLabel}>Cancelled</span>
         </div>
@@ -79,9 +84,10 @@ export function ProfileSection({ wallet }: ProfileSectionProps) {
       )}
 
       <p className={styles.hint}>
-        Reputation, lending history, and funding stats aren&apos;t shown here yet — reputation
-        scoring isn&apos;t deployed on Testnet, and this app doesn&apos;t have a funding UI yet
-        even though the loan_registry contract itself now supports funding (see Loan Details).
+        Reputation and lending-as-a-lender history aren&apos;t shown here yet — reputation
+        scoring isn&apos;t deployed on Testnet, and this contract has no way to look up every
+        loan a given wallet has funded (only per-loan, via Loan Details). The stats above cover
+        loans this wallet has borrowed, including real funding status.
       </p>
     </Card>
   );

@@ -94,6 +94,11 @@
   color: var(--p2p-red-600);
 }
 
+.eventBadgeFunded {
+  background: var(--p2p-purple-50);
+  color: var(--p2p-purple-600);
+}
+
 .txLink {
   font-family: var(--font-geist-mono);
   color: var(--p2p-purple-600);

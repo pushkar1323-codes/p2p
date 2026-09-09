@@ -3,12 +3,17 @@
 /**
  * useLoanRegistryWrite
  *
- * Reusable hook for `loan_registry` contract writes (L2-P06):
- * `createLoanRequest(amount)` and `cancelLoanRequest(loanId)`, sharing
- * one idle/pending/success/failure state so a UI component can show
- * consistent feedback regardless of which action was taken (same
- * shared-state approach `useTransfer` uses for its one `submit`
- * action).
+ * Reusable hook for `loan_registry` contract writes (L2-P06, L3-P12):
+ * `createLoanRequest(amount)`, `cancelLoanRequest(loanId)`, and
+ * `fundLoan(loanId, token, amount)`, sharing one idle/pending/success/
+ * failure state so a UI component can show consistent feedback
+ * regardless of which action was taken (same shared-state approach
+ * `useTransfer` uses for its one `submit` action). Create/cancel and
+ * fund are never actually both possible for the same connected
+ * wallet on the same loan at once (a wallet is either the borrower —
+ * who can cancel — or isn't — who can fund an Open loan — never
+ * both), so sharing one state machine between all three costs nothing
+ * in practice.
  *
  * Takes the connected wallet's address as a parameter — same
  * convention as `useTransfer`'s `sourceAddress` param — rather than
@@ -25,7 +30,7 @@
  */
 
 import { useCallback, useReducer, useRef } from "react";
-import { createLoanRequest, cancelLoanRequest } from "@/lib/stellar/loanRegistry";
+import { createLoanRequest, cancelLoanRequest, fundLoan as fundLoanRequest } from "@/lib/stellar/loanRegistry";
 import { isContractWriteError } from "@/lib/stellar/loanRegistryErrors";
 import type { ContractWriteError } from "@/lib/stellar/loanRegistry";
 import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
@@ -54,6 +59,7 @@ export interface UseLoanRegistryWriteResult
   extends ContractWriteState<LoanRegistryWriteResult, ContractWriteError> {
   createLoanRequest: (amount: string) => Promise<void>;
   cancelLoanRequest: (loanId: number) => Promise<void>;
+  fundLoan: (loanId: number, token: string, amount: bigint) => Promise<void>;
   reset: () => void;
 }
 
@@ -70,6 +76,11 @@ const INVALID_AMOUNT_ERROR: ContractWriteError = {
 const INVALID_LOAN_ID_ERROR: ContractWriteError = {
   code: "INVALID_LOAN_ID",
   message: "Enter a whole number loan ID (0 or greater).",
+};
+
+const INVALID_TOKEN_ERROR: ContractWriteError = {
+  code: "INVALID_AMOUNT",
+  message: "No funding token is configured. Please try again later.",
 };
 
 /** A non-negative integer with at least one nonzero digit, e.g. "500". */
@@ -154,6 +165,51 @@ export function useLoanRegistryWrite(
     [sourceAddress]
   );
 
+  const fund = useCallback(
+    async (loanId: number, token: string, amount: bigint) => {
+      if (!sourceAddress) {
+        requestTokenRef.current += 1;
+        dispatch({ type: "FAILURE", error: NOT_CONNECTED_ERROR });
+        return;
+      }
+      // Same defensive local-input validation as cancel's loanId
+      // check above. `token`/`amount` are never user-typed (see
+      // FundLoanAction.tsx — the amount is always the loan's own
+      // read amount, the token is always the app's one configured
+      // funding asset), but validating them here anyway costs
+      // nothing and keeps this hook's own contract honest regardless
+      // of what a future caller might pass.
+      if (!Number.isInteger(loanId) || loanId < 0) {
+        requestTokenRef.current += 1;
+        dispatch({ type: "FAILURE", error: INVALID_LOAN_ID_ERROR });
+        return;
+      }
+      if (!token) {
+        requestTokenRef.current += 1;
+        dispatch({ type: "FAILURE", error: INVALID_TOKEN_ERROR });
+        return;
+      }
+      if (amount <= BigInt(0)) {
+        requestTokenRef.current += 1;
+        dispatch({ type: "FAILURE", error: INVALID_AMOUNT_ERROR });
+        return;
+      }
+
+      const requestToken = ++requestTokenRef.current;
+      dispatch({ type: "PENDING" });
+
+      try {
+        const { txHash, event } = await fundLoanRequest({ sourceAddress, loanId, token, amount });
+        if (requestTokenRef.current !== requestToken) return; // superseded
+        dispatch({ type: "SUCCESS", txHash, result: { loanId: null, event } });
+      } catch (error) {
+        if (requestTokenRef.current !== requestToken) return; // superseded
+        dispatch({ type: "FAILURE", error: normalizeWriteError(error) });
+      }
+    },
+    [sourceAddress]
+  );
+
   const reset = useCallback(() => {
     requestTokenRef.current += 1; // invalidate any in-flight request
     dispatch({ type: "RESET" });
@@ -163,6 +219,7 @@ export function useLoanRegistryWrite(
     ...state,
     createLoanRequest: create,
     cancelLoanRequest: cancel,
+    fundLoan: fund,
     reset,
   };
 }

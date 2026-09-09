@@ -46,8 +46,54 @@ test("returns null for an update from a different contract", () => {
 });
 
 test("returns null for an unrecognized eventType", () => {
-  const event = contractEventUpdateToLoanRegistryEvent(baseUpdate({ eventType: "funded" }), CONTRACT_ID);
+  const event = contractEventUpdateToLoanRegistryEvent(baseUpdate({ eventType: "repaid" }), CONTRACT_ID);
   assert.equal(event, null);
+});
+
+test("converts a well-formed 'funded' update into a LoanRegistryEvent (L3-P12)", () => {
+  const event = contractEventUpdateToLoanRegistryEvent(
+    baseUpdate({
+      eventType: "funded",
+      payload: { loanId: 3, lender: "GLENDER", token: "CTOKEN", amount: "2000" },
+    }),
+    CONTRACT_ID,
+  );
+  assert.deepEqual(event, { kind: "funded", loanId: 3, lender: "GLENDER", token: "CTOKEN", amount: BigInt(2000) });
+});
+
+test("accepts a numeric (not string) amount for 'funded'", () => {
+  const event = contractEventUpdateToLoanRegistryEvent(
+    baseUpdate({
+      eventType: "funded",
+      payload: { loanId: 3, lender: "GLENDER", token: "CTOKEN", amount: 2000 },
+    }),
+    CONTRACT_ID,
+  );
+  assert.deepEqual(event, { kind: "funded", loanId: 3, lender: "GLENDER", token: "CTOKEN", amount: BigInt(2000) });
+});
+
+test("returns null for a 'funded' update missing lender, token, or amount", () => {
+  assert.equal(
+    contractEventUpdateToLoanRegistryEvent(
+      baseUpdate({ eventType: "funded", payload: { loanId: 3, token: "CTOKEN", amount: "1" } }),
+      CONTRACT_ID,
+    ),
+    null,
+  );
+  assert.equal(
+    contractEventUpdateToLoanRegistryEvent(
+      baseUpdate({ eventType: "funded", payload: { loanId: 3, lender: "GLENDER", amount: "1" } }),
+      CONTRACT_ID,
+    ),
+    null,
+  );
+  assert.equal(
+    contractEventUpdateToLoanRegistryEvent(
+      baseUpdate({ eventType: "funded", payload: { loanId: 3, lender: "GLENDER", token: "CTOKEN" } }),
+      CONTRACT_ID,
+    ),
+    null,
+  );
 });
 
 test("returns null when the payload is missing entirely", () => {
