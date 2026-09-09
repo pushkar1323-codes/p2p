@@ -67,24 +67,29 @@ export const stellarConfig: StellarConfig = {
     "CAI7FGT5ORNLOC25SHOJ7DCZVW66DVEDAZMNGTTHBRZYFYU5ACSHQKCS"
   ),
   // Deployed via contracts/scripts/deploy_eligibility_testnet.sh, then
-  // initialized via init_eligibility_testnet.sh (L3-P14 — see
-  // docs/CURRENT_STATUS.md for the full deployment record). This is a
-  // public contract ID, not a secret.
+  // initialized via init_eligibility_testnet.sh, and wired into
+  // loan_registry via contracts/scripts/init_loan_registry_testnet.sh's
+  // set_eligibility_contract call. This is a public contract ID, not a
+  // secret.
   //
-  // IMPORTANT: this specific deployed instance still runs the OLD
-  // admin-grant `set_eligibility` model (L3-P07's original design) —
-  // it does NOT yet have `register`/`admin_block`/`admin_unblock`
-  // (the L3-P07/L3-P14 self-registration correction). This contract's
-  // *source* has been updated, but per that task's explicit scope
-  // ("do not deploy anything"), nothing has been redeployed yet. Once
-  // the corrected eligibility_registry is actually deployed and
-  // initialized, this fallback MUST be updated to that new instance's
-  // contract ID — the new storage model is not compatible with this
-  // one (a fresh contract instance, not an upgrade in place).
-  eligibilityRegistryContractId: requireEnv(
-    "NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID",
-    "CDH4ZPP6SGETTVINFJCKL2JUMRC7MMS7ANLRS4DNWEHRRUC52AFIY6AD"
-  ),
+  // Deliberately NO hardcoded fallback here (unlike the other IDs
+  // above): this contract has already been deployed more than once
+  // with genuinely incompatible storage models (the original
+  // admin-grant `set_eligibility` design, then the current borrower
+  // self-registration design — `register`/`admin_block`/
+  // `admin_unblock`; see contracts/eligibility_registry/src/lib.rs's
+  // module doc comment). A stale hardcoded default previously pointed
+  // at the old admin-grant deployment, which has no `register`
+  // entrypoint at all — calling it from RegisterWalletAction would
+  // fail with a confusing simulation error rather than a clear
+  // "not configured" one. Silently falling back to a wrong-but-valid-
+  // looking contract ID here is worse than failing loudly, so this
+  // value must always come from the environment: set
+  // NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID to the currently
+  // deployed self-registration instance's contract ID (see
+  // contracts/eligibility_registry/DEPLOYMENTS.md for the deployment
+  // record) in .env.local.
+  eligibilityRegistryContractId: requireEnv("NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID"),
   // Testnet's native XLM asset, represented as a Stellar Asset
   // Contract — NOT a contract this project deployed. Every Stellar
   // network already has this contract for its native asset; obtained
