@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { AddressChip } from "@/components/ui/AddressChip";
-import { PlusIcon, CheckCircleIcon } from "@/components/ui/icons";
+import { PlusIcon, CheckCircleIcon, UserIcon } from "@/components/ui/icons";
 import { TransactionFeedback } from "@/components/transaction/TransactionFeedback";
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
+import { useIsBorrowerEligible } from "@/hooks/useIsBorrowerEligible";
+import { RegisterWalletAction } from "./RegisterWalletAction";
 import { reportConfirmedLoanEvent } from "@/lib/backend/eventsApi";
 import { stellarConfig } from "@/config/stellar";
 import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
@@ -31,7 +33,12 @@ interface LoanRequestActionsProps {
 }
 
 /**
- * Create-only loan request form.
+ * Create-only loan request form, gated on eligibility
+ * (L3-P07/L3-P14 self-registration correction): a connected wallet
+ * that isn't yet eligible sees `RegisterWalletAction` instead of this
+ * form — a real, separate, wallet-signed transaction against
+ * `eligibility_registry`, not a frontend-only bypass of the on-chain
+ * check `create_loan_request` still performs.
  *
  * FCP-04: this component previously also offered a raw "cancel by
  * loan ID" form, sharing `useLoanRegistryWrite`'s idle/pending/
@@ -48,6 +55,7 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
   const [amount, setAmount] = useState("");
 
   const connected = walletStatus === "connected";
+  const eligibility = useIsBorrowerEligible(connected ? address : null);
   const write = useLoanRegistryWrite(connected ? address : null);
   const { status, txHash, result, error, createLoanRequest, reset } = write;
 
@@ -86,13 +94,40 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
   return (
     <Card>
       <CardHeader
-        icon={<PlusIcon width={18} height={18} />}
-        title="Create Loan Request"
-        description="Create a new loan request on the loan_registry contract."
+        icon={
+          connected && eligibility.data === false ? (
+            <UserIcon width={18} height={18} />
+          ) : (
+            <PlusIcon width={18} height={18} />
+          )
+        }
+        title={connected && eligibility.data === false ? "Register Wallet" : "Create Loan Request"}
+        description={
+          connected && eligibility.data === false
+            ? "One-time self-registration required by the loan_registry contract's Eligibility Registry."
+            : "Create a new loan request on the loan_registry contract."
+        }
       />
 
       {!connected ? (
         <p className={styles.disabledText}>Connect your wallet to create a loan request.</p>
+      ) : eligibility.status === "idle" || eligibility.status === "loading" ? (
+        <p className={styles.disabledText}>Checking your wallet&apos;s eligibility…</p>
+      ) : eligibility.status === "error" ? (
+        <div className={styles.form}>
+          <p className={styles.hint}>
+            Couldn&apos;t check this wallet&apos;s eligibility: {eligibility.error?.message}
+          </p>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={eligibility.refresh}
+          >
+            Try again
+          </button>
+        </div>
+      ) : eligibility.data === false && address ? (
+        <RegisterWalletAction address={address} onRegistered={eligibility.refresh} />
       ) : (
         <form className={styles.form} onSubmit={handleCreate}>
           <div className={styles.field}>

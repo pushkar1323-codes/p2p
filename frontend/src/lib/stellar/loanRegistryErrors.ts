@@ -161,6 +161,7 @@ export type ContractWriteErrorCode =
   | "INVALID_LOAN_ID"
   | "REJECTED"
   | "NOT_ELIGIBLE"
+  | "BLOCKED"
   | "SIMULATION_FAILED"
   | "SUBMISSION_FAILED"
   | "TRANSACTION_FAILED"
@@ -180,6 +181,7 @@ const CONTRACT_WRITE_ERROR_CODES: ContractWriteErrorCode[] = [
   "INVALID_LOAN_ID",
   "REJECTED",
   "NOT_ELIGIBLE",
+  "BLOCKED",
   "SIMULATION_FAILED",
   "SUBMISSION_FAILED",
   "TRANSACTION_FAILED",
@@ -218,11 +220,10 @@ export function isEligibilityRejection(simulationMessage: string): boolean {
 }
 
 export const NOT_ELIGIBLE_MESSAGE =
-  "This wallet isn't currently approved to create loan requests. " +
-  "loan_registry only accepts requests from borrower addresses an " +
-  "administrator has allow-listed on the Eligibility Registry — this " +
-  "isn't a bug or a temporary issue. Contact the project administrator " +
-  "if you believe this wallet should be approved.";
+  "This wallet isn't registered to create loan requests yet. " +
+  "loan_registry requires borrowers to register with the Eligibility " +
+  "Registry first (a one-time, self-service transaction — no " +
+  "administrator involved) before it will accept a loan request.";
 
 /**
  * Generic fallback classifier for contract-write failures: detects

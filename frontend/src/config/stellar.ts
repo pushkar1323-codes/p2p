@@ -21,6 +21,7 @@ interface StellarConfig {
   horizonUrl: string;
   sorobanRpcUrl: string;
   loanRegistryContractId: string;
+  eligibilityRegistryContractId: string;
 }
 
 function requireEnv(name: string, fallback?: string): string {
@@ -63,6 +64,25 @@ export const stellarConfig: StellarConfig = {
   loanRegistryContractId: requireEnv(
     "NEXT_PUBLIC_LOAN_REGISTRY_CONTRACT_ID",
     "CAI7FGT5ORNLOC25SHOJ7DCZVW66DVEDAZMNGTTHBRZYFYU5ACSHQKCS"
+  ),
+  // Deployed via contracts/scripts/deploy_eligibility_testnet.sh, then
+  // initialized via init_eligibility_testnet.sh (L3-P14 — see
+  // docs/CURRENT_STATUS.md for the full deployment record). This is a
+  // public contract ID, not a secret.
+  //
+  // IMPORTANT: this specific deployed instance still runs the OLD
+  // admin-grant `set_eligibility` model (L3-P07's original design) —
+  // it does NOT yet have `register`/`admin_block`/`admin_unblock`
+  // (the L3-P07/L3-P14 self-registration correction). This contract's
+  // *source* has been updated, but per that task's explicit scope
+  // ("do not deploy anything"), nothing has been redeployed yet. Once
+  // the corrected eligibility_registry is actually deployed and
+  // initialized, this fallback MUST be updated to that new instance's
+  // contract ID — the new storage model is not compatible with this
+  // one (a fresh contract instance, not an upgrade in place).
+  eligibilityRegistryContractId: requireEnv(
+    "NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID",
+    "CDH4ZPP6SGETTVINFJCKL2JUMRC7MMS7ANLRS4DNWEHRRUC52AFIY6AD"
   ),
 };
 

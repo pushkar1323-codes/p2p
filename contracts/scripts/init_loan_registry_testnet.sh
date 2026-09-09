@@ -1,48 +1,45 @@
 #!/usr/bin/env bash
 #
-# One-time bootstrap for an already-(re)deployed loan_registry
-# instance: calls initialize(admin), then set_eligibility_contract
-# (admin, ELIGIBILITY_REGISTRY_CONTRACT_ID) — wiring loan_registry's
-# create_loan_request to the eligibility_registry deployment.
+# Bootstrap/re-wire for an already-deployed loan_registry instance:
+# calls initialize(admin) (tolerating AlreadyInitialized — see below),
+# then set_eligibility_contract(admin, ELIGIBILITY_REGISTRY_CONTRACT_ID)
+# — wiring loan_registry's create_loan_request to whichever
+# eligibility_registry deployment is currently configured.
 #
-# Run this AFTER:
-#   1. deploy_eligibility_testnet.sh + init_eligibility_testnet.sh
-#      (+ allowlist_borrower_testnet.sh for at least one test wallet,
-#      otherwise nobody will be able to create a loan yet)
-#   2. loan_registry has been (re)deployed with the current source —
-#      the currently deployed Testnet loan_registry instance predates
-#      initialize/set_eligibility_contract entirely and does not need
-#      (or support) this script; this is for the NEW deployment only.
+# Two situations this script supports:
+#   A. loan_registry was just (re)deployed and has never been
+#      initialized — this script initializes it, then wires it.
+#   B. loan_registry is ALREADY initialized (e.g. the L3-P07/L3-P14
+#      self-registration correction: eligibility_registry got a new
+#      instance, but loan_registry's own code didn't change, so it
+#      was NOT redeployed — see DEPLOYMENT_SEQUENCE.md) and this
+#      script is being re-run purely to re-wire it to the new
+#      eligibility_registry instance.
 #
-# Calling initialize a second time against the same contract instance
-# fails with AlreadyInitialized (by design) and changes nothing — safe
-# if you re-run this script by mistake. set_eligibility_contract can
-# be called again later to point at a different eligibility contract,
-# by design (L3-P07) — this script does not add or remove that
-# flexibility, only exercises it once.
+# `initialize` failing with AlreadyInitialized is expected and NOT
+# fatal in situation B — this script detects that specific case and
+# continues on to set_eligibility_contract regardless. Any other
+# initialize failure (bad network, wrong identity, etc.) IS fatal —
+# those indicate a real problem the prerequisite checks below didn't
+# already catch.
 #
 # PREREQUISITES:
 #   - The Stellar CLI installed.
 #   - contracts/.env with:
 #       DEPLOYER_IDENTITY   — a funded Testnet identity
 #       ADMIN_IDENTITY      — optional; defaults to DEPLOYER_IDENTITY.
-#                             Becomes loan_registry's admin. Does not
-#                             need to be the same admin identity used
-#                             for eligibility_registry, but it's
-#                             simplest if it is — this script does not
-#                             require or enforce either choice.
-#       LOAN_REGISTRY_CONTRACT_ID        — the NEW loan_registry
-#                             contract ID (from redeploying via
-#                             deploy_testnet.sh), NOT the currently
-#                             deployed one recorded in
-#                             loan_registry/DEPLOYMENTS.md.
-#       ELIGIBILITY_REGISTRY_CONTRACT_ID — from
-#                             deploy_eligibility_testnet.sh.
+#                             Must be loan_registry's actual admin if
+#                             it's already initialized (situation B).
+#       LOAN_REGISTRY_CONTRACT_ID        — the currently deployed
+#                             loan_registry contract ID.
+#       ELIGIBILITY_REGISTRY_CONTRACT_ID — the eligibility_registry
+#                             instance to wire to (from
+#                             deploy_eligibility_testnet.sh).
 #
 # USAGE:
 #   cd contracts && ./scripts/init_loan_registry_testnet.sh
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTRACTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -81,8 +78,10 @@ fi
 
 if [[ -z "$LOAN_REGISTRY_CONTRACT_ID" ]]; then
   echo "error: LOAN_REGISTRY_CONTRACT_ID is not set." >&2
-  echo "       Redeploy loan_registry first (./scripts/deploy_testnet.sh) and" >&2
-  echo "       copy the NEW printed contract ID into contracts/.env." >&2
+  echo "       Set it to the currently deployed loan_registry contract ID" >&2
+  echo "       (redeploying via ./scripts/deploy_testnet.sh is only needed" >&2
+  echo "       if loan_registry's own source has changed, not for a" >&2
+  echo "       re-wiring-only run — see DEPLOYMENT_SEQUENCE.md)." >&2
   missing=1
 fi
 
@@ -108,13 +107,34 @@ echo "Eligibility dep:     eligibility_registry ($ELIGIBILITY_REGISTRY_CONTRACT_
 echo ""
 
 echo "Calling initialize(admin=$ADMIN_ADDRESS)..."
-stellar contract invoke \
-  --id "$LOAN_REGISTRY_CONTRACT_ID" \
-  --source "$ADMIN_IDENTITY" \
-  --network "$STELLAR_NETWORK" \
-  -- \
-  initialize \
-  --admin "$ADMIN_ADDRESS"
+set +e
+INIT_OUTPUT="$(
+  stellar contract invoke \
+    --id "$LOAN_REGISTRY_CONTRACT_ID" \
+    --source "$ADMIN_IDENTITY" \
+    --network "$STELLAR_NETWORK" \
+    -- \
+    initialize \
+    --admin "$ADMIN_ADDRESS" 2>&1
+)"
+INIT_EXIT=$?
+set -e
+echo "$INIT_OUTPUT"
+
+if [[ "$INIT_EXIT" -ne 0 ]]; then
+  if echo "$INIT_OUTPUT" | grep -q "Error(Contract, #5)"; then
+    echo ""
+    echo "loan_registry is already initialized (Error #5, AlreadyInitialized)"
+    echo "— expected if you're re-wiring an existing instance. Continuing to"
+    echo "set_eligibility_contract..."
+  else
+    echo "" >&2
+    echo "error: initialize failed for a reason other than" >&2
+    echo "       AlreadyInitialized — stopping before" >&2
+    echo "       set_eligibility_contract. See the output above." >&2
+    exit 1
+  fi
+fi
 
 echo ""
 echo "Calling set_eligibility_contract(admin=$ADMIN_ADDRESS, contract_id=$ELIGIBILITY_REGISTRY_CONTRACT_ID)..."
@@ -128,8 +148,9 @@ stellar contract invoke \
   --contract_id "$ELIGIBILITY_REGISTRY_CONTRACT_ID"
 
 echo ""
-echo "loan_registry initialized and wired to eligibility_registry."
-echo "Reminder: only borrower addresses allow-listed via"
-echo "./scripts/allowlist_borrower_testnet.sh will be able to call"
-echo "create_loan_request successfully — everyone else gets"
-echo "BorrowerNotEligible until an admin allow-lists them."
+echo "loan_registry is wired to eligibility_registry ($ELIGIBILITY_REGISTRY_CONTRACT_ID)."
+echo "Reminder: borrowers must register themselves against that contract"
+echo "(the frontend's Register Wallet action, or"
+echo "./scripts/register_borrower_testnet.sh for CLI testing) before"
+echo "create_loan_request will succeed for them — nobody is eligible until"
+echo "they've done that themselves."

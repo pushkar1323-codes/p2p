@@ -29,7 +29,7 @@ fn setup() -> (Env, LoanRegistryClient<'static>, Address) {
     let eligibility_id = env.register_contract(None, EligibilityRegistry);
     let eligibility_client = EligibilityRegistryClient::new(&env, &eligibility_id);
     eligibility_client.initialize(&admin);
-    eligibility_client.set_eligibility(&admin, &borrower, &true);
+    eligibility_client.register(&borrower);
 
     client.initialize(&admin);
     client.set_eligibility_contract(&admin, &eligibility_id);
@@ -358,7 +358,7 @@ fn loan_registry_and_eligibility_registry_integrate_end_to_end() {
     let eligibility_client = EligibilityRegistryClient::new(&env, &eligibility_id);
     eligibility_client.initialize(&admin);
     assert!(!eligibility_client.is_borrower_eligible(&borrower));
-    eligibility_client.set_eligibility(&admin, &borrower, &true);
+    eligibility_client.register(&borrower);
     assert!(eligibility_client.is_borrower_eligible(&borrower));
 
     let loan_registry_id = env.register_contract(None, LoanRegistry);
@@ -375,7 +375,7 @@ fn loan_registry_and_eligibility_registry_integrate_end_to_end() {
 
     // Revoking eligibility after the fact must not retroactively
     // affect the already-created loan, but must block a second one.
-    eligibility_client.set_eligibility(&admin, &borrower, &false);
+    eligibility_client.admin_block(&admin, &borrower);
     let second_attempt = loan_registry_client.try_create_loan_request(&borrower, &1_000i128);
     assert_eq!(second_attempt, Err(Ok(Error::BorrowerNotEligible)));
     assert_eq!(loan_registry_client.get_loan_count(), 1);
