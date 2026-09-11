@@ -13,6 +13,8 @@
  * be read through this module or exposed to the frontend.
  */
 
+import { requireEnv } from "./requireEnv";
+
 export type StellarNetwork = "TESTNET" | "PUBLIC" | "FUTURENET" | "STANDALONE";
 
 interface StellarConfig {
@@ -25,16 +27,6 @@ interface StellarConfig {
   nativeXlmSacContractId: string;
 }
 
-function requireEnv(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable: ${name}. Check your .env file against .env.example.`
-    );
-  }
-  return value;
-}
-
 /**
  * Stellar Testnet is the default/only supported network through
  * Level 5 of the project. Mainnet is introduced at Level 6 and must
@@ -44,14 +36,17 @@ export const stellarConfig: StellarConfig = {
   network: (process.env.NEXT_PUBLIC_STELLAR_NETWORK as StellarNetwork) || "TESTNET",
   networkPassphrase: requireEnv(
     "NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE",
+    process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE,
     "Test SDF Network ; September 2015"
   ),
   horizonUrl: requireEnv(
     "NEXT_PUBLIC_HORIZON_URL",
+    process.env.NEXT_PUBLIC_HORIZON_URL,
     "https://horizon-testnet.stellar.org"
   ),
   sorobanRpcUrl: requireEnv(
     "NEXT_PUBLIC_SOROBAN_RPC_URL",
+    process.env.NEXT_PUBLIC_SOROBAN_RPC_URL,
     "https://soroban-testnet.stellar.org"
   ),
   // Deployed via contracts/scripts/deploy_testnet.sh, then wired to
@@ -64,6 +59,7 @@ export const stellarConfig: StellarConfig = {
   // revert to it.
   loanRegistryContractId: requireEnv(
     "NEXT_PUBLIC_LOAN_REGISTRY_CONTRACT_ID",
+    process.env.NEXT_PUBLIC_LOAN_REGISTRY_CONTRACT_ID,
     "CAI7FGT5ORNLOC25SHOJ7DCZVW66DVEDAZMNGTTHBRZYFYU5ACSHQKCS"
   ),
   // Deployed via contracts/scripts/deploy_eligibility_testnet.sh, then
@@ -89,7 +85,10 @@ export const stellarConfig: StellarConfig = {
   // deployed self-registration instance's contract ID (see
   // contracts/eligibility_registry/DEPLOYMENTS.md for the deployment
   // record) in .env.local.
-  eligibilityRegistryContractId: requireEnv("NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID"),
+  eligibilityRegistryContractId: requireEnv(
+    "NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID",
+    process.env.NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID
+  ),
   // Testnet's native XLM asset, represented as a Stellar Asset
   // Contract — NOT a contract this project deployed. Every Stellar
   // network already has this contract for its native asset; obtained
@@ -103,6 +102,7 @@ export const stellarConfig: StellarConfig = {
   // Public contract ID, not a secret.
   nativeXlmSacContractId: requireEnv(
     "NEXT_PUBLIC_NATIVE_XLM_SAC_CONTRACT_ID",
+    process.env.NEXT_PUBLIC_NATIVE_XLM_SAC_CONTRACT_ID,
     "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
   ),
 };
