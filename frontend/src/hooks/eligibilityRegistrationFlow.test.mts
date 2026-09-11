@@ -36,6 +36,7 @@ import {
 } from "./contractWriteState.ts";
 import { BLOCKED_MESSAGE } from "../lib/stellar/eligibilityRegistryErrors.ts";
 import type { ContractWriteError, LoanRegistryError } from "../lib/stellar/eligibilityRegistryErrors.ts";
+import { retryEligibilityRefreshOnce } from "./eligibilityRetry.ts";
 
 // Read side (useIsBorrowerEligible): boolean data, LoanRegistryError on failure.
 type ReadState = ReturnType<typeof initialContractReadState<boolean, LoanRegistryError>>;
@@ -164,7 +165,73 @@ test("failed registration: a submission/simulation failure surfaces as a FAILURE
   assert.equal(write.error, null);
 });
 
-// --- Registration state refresh -------------------------------------------------
+// --- UNREGISTERED -> REGISTERING -> REGISTERED (exact wording requested) ---
+
+test("UNREGISTERED -> REGISTERING -> REGISTERED: full happy-path state transition", () => {
+  // UNREGISTERED
+  let read = initialRead();
+  read = contractReadReducer(read, { type: "FETCH_START" });
+  read = contractReadReducer(read, { type: "FETCH_SUCCESS", data: false });
+  assert.equal(read.data, false, "UNREGISTERED");
+
+  // REGISTERING
+  let write = initialWrite();
+  write = contractWriteReducer(write, { type: "PENDING" });
+  assert.equal(write.status, "pending", "REGISTERING");
+
+  // REGISTERED (write confirms, then the mandatory re-check confirms too)
+  write = contractWriteReducer(write, { type: "SUCCESS", txHash: "regtxhash", result: null });
+  assert.equal(write.status, "success");
+  read = contractReadReducer(read, { type: "FETCH_START" });
+  read = contractReadReducer(read, { type: "FETCH_SUCCESS", data: true });
+  assert.equal(read.data, true, "REGISTERED");
+});
+
+// --- retryEligibilityRefreshOnce (bounded post-registration retry) ---
+
+test("retryEligibilityRefreshOnce: does not retry when the first refresh already reports eligible", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const refresh = t.mock.fn(async () => true);
+
+  await retryEligibilityRefreshOnce(refresh);
+
+  assert.equal(refresh.mock.callCount(), 1);
+});
+
+test("retryEligibilityRefreshOnce: retries exactly once, after the given delay, when the first refresh still reports ineligible", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let calls = 0;
+  const refresh = t.mock.fn(async () => {
+    calls += 1;
+    return calls > 1; // false on the 1st call, true on the 2nd
+  });
+
+  const pending = retryEligibilityRefreshOnce(refresh, 1500);
+  await Promise.resolve(); // let the first refresh() call fire
+  await Promise.resolve();
+  assert.equal(refresh.mock.callCount(), 1, "should not have retried yet — delay hasn't elapsed");
+
+  t.mock.timers.tick(1499);
+  await Promise.resolve();
+  assert.equal(refresh.mock.callCount(), 1, "still not yet — one millisecond short of the delay");
+
+  t.mock.timers.tick(1);
+  await pending;
+  assert.equal(refresh.mock.callCount(), 2, "exactly one retry after the full delay elapsed");
+});
+
+test("retryEligibilityRefreshOnce: stops after the single retry even if the wallet is still ineligible (does not loop)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const refresh = t.mock.fn(async () => false);
+
+  const pending = retryEligibilityRefreshOnce(refresh, 1500);
+  await Promise.resolve();
+  t.mock.timers.tick(1500);
+  await pending;
+
+  assert.equal(refresh.mock.callCount(), 2, "exactly two calls total — not zero, not three+");
+});
+
 
 test("registration state refresh: after a successful register(), re-checking eligibility (refresh) transitions unregistered -> registered", () => {
   // Before registering: read side reports not-eligible.

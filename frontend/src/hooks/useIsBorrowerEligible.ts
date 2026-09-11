@@ -22,9 +22,20 @@ import {
   initialContractReadState,
   type ContractReadState,
 } from "./contractReadState";
+export { retryEligibilityRefreshOnce } from "./eligibilityRetry";
 
 export interface UseIsBorrowerEligibleResult extends ContractReadState<boolean, LoanRegistryError> {
-  refresh: () => void;
+  /**
+   * Re-fetches eligibility for the current address. Resolves with the
+   * freshly-read value (or `false` if `address` is `null`, or on a
+   * read error — callers that need to distinguish an error from a
+   * real `false` should read `.error`/`.data` off the hook's own
+   * returned state instead, same as before; the resolved value here
+   * exists only so a caller that just performed a write — see
+   * `LoanRequestActions.tsx`'s post-registration retry — can react to
+   * the outcome without a separate effect). Never rejects.
+   */
+  refresh: () => Promise<boolean>;
 }
 
 export function useIsBorrowerEligible(address: string | null): UseIsBorrowerEligibleResult {
@@ -36,23 +47,25 @@ export function useIsBorrowerEligible(address: string | null): UseIsBorrowerElig
   const requestedAddressRef = useRef<string | null>(null);
   const requestTokenRef = useRef(0);
 
-  const load = useCallback((addr: string) => {
+  const load = useCallback((addr: string): Promise<boolean> => {
     requestedAddressRef.current = addr;
     const token = ++requestTokenRef.current;
     dispatch({ type: "FETCH_START" });
 
-    isBorrowerEligible(addr)
+    return isBorrowerEligible(addr)
       .then((data) => {
         if (requestedAddressRef.current !== addr || requestTokenRef.current !== token) {
-          return; // stale — address or refresh() superseded this request
+          return data; // stale — address or refresh() superseded this request; still return the real value to this specific caller
         }
         dispatch({ type: "FETCH_SUCCESS", data });
+        return data;
       })
       .catch((error: LoanRegistryError) => {
         if (requestedAddressRef.current !== addr || requestTokenRef.current !== token) {
-          return; // stale
+          return false; // stale
         }
         dispatch({ type: "FETCH_ERROR", error });
+        return false;
       });
   }, []);
 
@@ -66,9 +79,9 @@ export function useIsBorrowerEligible(address: string | null): UseIsBorrowerElig
     load(address);
   }, [address, load]);
 
-  const refresh = useCallback(() => {
-    if (address === null) return;
-    load(address);
+  const refresh = useCallback((): Promise<boolean> => {
+    if (address === null) return Promise.resolve(false);
+    return load(address);
   }, [address, load]);
 
   return { ...state, refresh };

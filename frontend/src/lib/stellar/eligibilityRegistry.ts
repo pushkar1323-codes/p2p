@@ -111,6 +111,27 @@ function toReadError(err: unknown): LoanRegistryError {
 export async function isBorrowerEligible(borrower: string): Promise<boolean> {
   try {
     const client = await getClient();
+    // Diagnostic only (not gated behind NODE_ENV — contract IDs and
+    // wallet addresses are already public on-chain, nothing sensitive
+    // here). Added while investigating a live report of the
+    // "Register Wallet" card persisting after an apparently
+    // successful registration: this sandbox has no network path to
+    // Stellar Testnet (confirmed: soroban-testnet.stellar.org /
+    // horizon-testnet.stellar.org are both outside its egress
+    // allowlist) or a browser to reproduce the live flow directly, so
+    // this line lets it be confirmed instead from the browser
+    // devtools console on the machine that CAN reach Testnet — most
+    // usefully, whether this matches the contract ID
+    // `register()` below just wrote to (it always will within a
+    // single page load — both share the one `getClient()` singleton —
+    // but a stale build/dev-server from before
+    // `NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID` was last updated
+    // could still be serving an old bundle with a different value
+    // baked in; this makes that directly checkable rather than
+    // guessed at).
+    console.debug(
+      `[eligibility_registry] is_borrower_eligible(${borrower}) — contract ${stellarConfig.eligibilityRegistryContractId}`
+    );
     const { result } = await client.is_borrower_eligible({ borrower });
     return result;
   } catch (err) {
@@ -136,6 +157,13 @@ export interface RegisterResult {
 export async function register(borrower: string): Promise<RegisterResult> {
   try {
     const client = await getClient();
+    // Same diagnostic reasoning as isBorrowerEligible() above — lets
+    // the read and write contract IDs be visually cross-checked in
+    // the browser console during a live test, since this sandbox
+    // cannot make that call itself.
+    console.debug(
+      `[eligibility_registry] register(${borrower}) — contract ${stellarConfig.eligibilityRegistryContractId}`
+    );
     const assembled = await client.register(
       { borrower },
       { publicKey: borrower, signTransaction: signWithSelectedWallet }
@@ -146,6 +174,7 @@ export async function register(borrower: string): Promise<RegisterResult> {
       confirmed: sent.getTransactionResponse?.status === rpc.Api.GetTransactionStatus.SUCCESS,
     });
     resolveOkResult(sent.result, "Registration could not be completed.");
+    console.debug(`[eligibility_registry] register(${borrower}) confirmed — tx ${txHash}`);
     return { txHash };
   } catch (err) {
     // See loanRegistry.ts's getLoanCount()'s identical comment.

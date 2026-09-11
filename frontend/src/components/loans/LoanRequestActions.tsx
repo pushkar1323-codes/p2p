@@ -8,7 +8,7 @@ import { TransactionFeedback } from "@/components/transaction/TransactionFeedbac
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
-import { useIsBorrowerEligible } from "@/hooks/useIsBorrowerEligible";
+import { useIsBorrowerEligible, retryEligibilityRefreshOnce } from "@/hooks/useIsBorrowerEligible";
 import { RegisterWalletAction } from "./RegisterWalletAction";
 import { reportConfirmedLoanEvent } from "@/lib/backend/eventsApi";
 import { stellarConfig } from "@/config/stellar";
@@ -91,6 +91,18 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
     onSuccess?.();
   }
 
+  /**
+   * Passed to `RegisterWalletAction` as `onRegistered` — called right
+   * after a registration attempt (success OR failure; see that
+   * component's own comment on why it's unconditional). Delegates the
+   * actual bounded-retry policy to `retryEligibilityRefreshOnce` (see
+   * its doc comment in `eligibilityRetry.ts` for the full
+   * reasoning and why it's deliberately bounded to one retry).
+   */
+  function handleRegistered() {
+    void retryEligibilityRefreshOnce(eligibility.refresh);
+  }
+
   return (
     <Card>
       <CardHeader
@@ -127,7 +139,7 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
           </button>
         </div>
       ) : eligibility.data === false && address ? (
-        <RegisterWalletAction address={address} onRegistered={eligibility.refresh} />
+        <RegisterWalletAction address={address} onRegistered={handleRegistered} />
       ) : (
         <form className={styles.form} onSubmit={handleCreate}>
           <div className={styles.field}>
