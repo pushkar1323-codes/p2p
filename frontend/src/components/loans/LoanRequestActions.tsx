@@ -10,6 +10,7 @@ import { testnetExplorerUrl } from "@/lib/stellar/transaction";
 import { useLoanRegistryWrite } from "@/hooks/useLoanRegistryWrite";
 import { useIsBorrowerEligible, retryEligibilityRefreshOnce } from "@/hooks/useIsBorrowerEligible";
 import { RegisterWalletAction } from "./RegisterWalletAction";
+import { resolveLoanRequestView } from "./loanRequestView";
 import { reportConfirmedLoanEvent } from "@/lib/backend/eventsApi";
 import { stellarConfig } from "@/config/stellar";
 import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
@@ -103,29 +104,31 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
     void retryEligibilityRefreshOnce(eligibility.refresh);
   }
 
+  const view = resolveLoanRequestView(connected, eligibility.status, eligibility.data);
+
   return (
     <Card>
       <CardHeader
         icon={
-          connected && eligibility.data === false ? (
+          view === "register" ? (
             <UserIcon width={18} height={18} />
           ) : (
             <PlusIcon width={18} height={18} />
           )
         }
-        title={connected && eligibility.data === false ? "Register Wallet" : "Create Loan Request"}
+        title={view === "register" ? "Register Wallet" : "Create Loan Request"}
         description={
-          connected && eligibility.data === false
+          view === "register"
             ? "One-time self-registration required by the loan_registry contract's Eligibility Registry."
             : "Create a new loan request on the loan_registry contract."
         }
       />
 
-      {!connected ? (
+      {view === "connect" ? (
         <p className={styles.disabledText}>Connect your wallet to create a loan request.</p>
-      ) : eligibility.status === "idle" || eligibility.status === "loading" ? (
+      ) : view === "loading" ? (
         <p className={styles.disabledText}>Checking your wallet&apos;s eligibility…</p>
-      ) : eligibility.status === "error" ? (
+      ) : view === "error" ? (
         <div className={styles.form}>
           <p className={styles.hint}>
             Couldn&apos;t check this wallet&apos;s eligibility: {eligibility.error?.message}
@@ -138,7 +141,7 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
             Try again
           </button>
         </div>
-      ) : eligibility.data === false && address ? (
+      ) : view === "register" && address ? (
         <RegisterWalletAction address={address} onRegistered={handleRegistered} />
       ) : (
         <form className={styles.form} onSubmit={handleCreate}>

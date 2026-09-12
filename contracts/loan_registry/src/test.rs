@@ -381,6 +381,68 @@ fn loan_registry_and_eligibility_registry_integrate_end_to_end() {
     assert_eq!(loan_registry_client.get_loan_count(), 1);
 }
 
+// (D2) Integration: the full realistic admin lifecycle a real
+// platform user goes through — registered, blocked, unblocked, and
+// re-registered — asserting `create_loan_request`'s result at every
+// step against the *actual* deployed eligibility_registry, not a
+// mock. This extends (D) above rather than duplicating it: (D) stops
+// at "blocked"; this covers what (D) deliberately leaves out —
+// specifically that `admin_unblock` does NOT restore registration
+// (eligibility_registry's own `an_unblocked_wallet_is_still_unregistered_until_it_registers_again`
+// contract behavior), so a real borrower must self-register again
+// before they can create another loan request.
+#[test]
+fn loan_registry_and_eligibility_registry_full_admin_lifecycle() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let borrower = Address::generate(&env);
+
+    let eligibility_id = env.register_contract(None, EligibilityRegistry);
+    let eligibility_client = EligibilityRegistryClient::new(&env, &eligibility_id);
+    eligibility_client.initialize(&admin);
+
+    let loan_registry_id = env.register_contract(None, LoanRegistry);
+    let loan_registry_client = LoanRegistryClient::new(&env, &loan_registry_id);
+    loan_registry_client.initialize(&admin);
+    loan_registry_client.set_eligibility_contract(&admin, &eligibility_id);
+
+    // registered borrower -> create loan succeeds
+    eligibility_client.register(&borrower);
+    let first_loan_id = loan_registry_client.create_loan_request(&borrower, &1_000i128);
+    assert_eq!(loan_registry_client.get_loan_count(), 1);
+
+    // admin blocks borrower -> create loan fails with BorrowerNotEligible
+    eligibility_client.admin_block(&admin, &borrower);
+    let blocked_attempt = loan_registry_client.try_create_loan_request(&borrower, &500i128);
+    assert_eq!(blocked_attempt, Err(Ok(Error::BorrowerNotEligible)));
+    assert_eq!(loan_registry_client.get_loan_count(), 1);
+
+    // admin unblocks borrower -> create loan STILL fails, because
+    // unblocking does not automatically re-register the borrower.
+    eligibility_client.admin_unblock(&admin, &borrower);
+    assert!(!eligibility_client.is_borrower_eligible(&borrower));
+    let unblocked_but_unregistered_attempt =
+        loan_registry_client.try_create_loan_request(&borrower, &500i128);
+    assert_eq!(
+        unblocked_but_unregistered_attempt,
+        Err(Ok(Error::BorrowerNotEligible))
+    );
+    assert_eq!(loan_registry_client.get_loan_count(), 1);
+
+    // borrower registers again -> create loan succeeds
+    eligibility_client.register(&borrower);
+    assert!(eligibility_client.is_borrower_eligible(&borrower));
+    let second_loan_id = loan_registry_client.create_loan_request(&borrower, &750i128);
+    assert_eq!(loan_registry_client.get_loan_count(), 2);
+    assert_ne!(first_loan_id, second_loan_id);
+
+    let second_loan = loan_registry_client.get_loan_request(&second_loan_id);
+    assert_eq!(second_loan.borrower, borrower);
+    assert_eq!(second_loan.amount, 750);
+}
+
 // --- L3-P11: collateral locking -----------------------------------
 
 /// Builds on `setup()` and additionally registers a real Stellar
