@@ -23,6 +23,24 @@
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+/*
+ * A modest touch-target bump for actual touch devices only — not a
+ * width-based breakpoint, since a mouse-driven desktop window doesn't
+ * need bigger buttons regardless of how narrow it is. This reuses the
+ * same `hover`/`pointer` media-feature check already established in
+ * ConnectWalletButton.module.css (there, to suppress hover states on
+ * touch; here, the same detection, to size touch targets). 28px is a
+ * bit tight for touch; 32px is a modest, low-risk increase that keeps
+ * the segmented pill control's proportions intact without touching
+ * desktop's rendering at all.
+ */
+@media (hover: none), (pointer: coarse) {
+  .option {
+    width: 32px;
+    height: 32px;
+  }
+}
+
 .option:hover {
   color: var(--p2p-text-primary);
 }

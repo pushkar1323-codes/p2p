@@ -45,6 +45,39 @@
   gap: var(--p2p-space-3);
 }
 
+/*
+ * Below ~480px, `dt`/`dd` pairs are stacked instead of kept
+ * side-by-side. Most values here are short (loan ID, a truncated
+ * AddressChip, an amount, a status badge) and fit fine as a row even
+ * on a phone, but a few are not — most notably a funding-error
+ * message plus an inline Retry button under "Funding record" (see
+ * LoanDetailSection.tsx), which has no natural width limit. With
+ * `justify-content: space-between` and no fallback, a long `dd` had
+ * nowhere to go but cramp itself against `dt` or push the row wider
+ * than the viewport. Stacking removes that constraint entirely for
+ * every row, not just the risky one — simpler and more robust than
+ * special-casing individual `dd` contents, and it costs nothing on
+ * the rows that were already narrow enough to sit side-by-side.
+ *
+ * 480px isn't one of this project's existing breakpoints (900px for
+ * nav, 960px/600px for the dashboard grid, 960px/640px for the loan
+ * grid, 420px for TransactionFeedback) — it sits deliberately between
+ * the 420px and 600px ones already in use, since this is a detail
+ * page with narrower content blocks than either of those contexts.
+ */
+@media (max-width: 480px) {
+  .detailRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--p2p-space-1);
+  }
+
+  .detailRow dd {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
 .detailRow dt {
   font-size: var(--p2p-text-sm);
   color: var(--p2p-text-secondary);

@@ -11,6 +11,34 @@
   cursor: pointer;
 }
 
+/*
+ * Below the Dashboard's own single-column breakpoint (see
+ * DashboardOverview.module.css's `.cardsGrid`), these footer links —
+ * "Connect wallet", "Refresh", "View contract" — are real,
+ * often-tapped actions rather than desktop-only affordances, but
+ * `padding: 0` above gives them an actual tappable box of only the
+ * text's line-height (~15px), well below any usable touch-target
+ * size.
+ *
+ * Fixed with the standard "invisible padding" technique: equal
+ * positive padding and negative margin on every side. The padding
+ * grows the element's hit-testable box; the matching negative margin
+ * pulls that bigger box back so the *content* (text, icon, color,
+ * spacing) sits at exactly the same visual position it already did —
+ * no card/layout expansion, nothing shifts on screen, only the
+ * invisible tappable area grows. Scoped to this one breakpoint (not
+ * applied on desktop) specifically per "avoid causing card/layout
+ * expansion that looks excessive on desktop" — the negative margin is
+ * visually neutral, but there's no reason to touch desktop's box
+ * model when only touch targets are the concern.
+ */
+@media (max-width: 600px) {
+  .footerLink {
+    padding: 10px 8px;
+    margin: -10px -8px;
+  }
+}
+
 .footerLink:hover {
   color: var(--p2p-purple-700);
   text-decoration: underline;
