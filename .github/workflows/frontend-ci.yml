@@ -15,6 +15,16 @@ defaults:
   run:
     working-directory: frontend
 
+env:
+  # Public Testnet contract ID, not a secret (see .env.example). No
+  # other NEXT_PUBLIC_* value needs to be set here: stellar.ts has
+  # hardcoded Testnet fallbacks for all of them except this one —
+  # deliberately, since this contract has been redeployed before with
+  # an incompatible interface, so a stale hardcoded default was judged
+  # worse than failing loudly (see stellar.ts's own comment on this
+  # value).
+  NEXT_PUBLIC_ELIGIBILITY_REGISTRY_CONTRACT_ID: CD6LKL7SI2KTT27AVW7COYXKZZP2DSWUDLUD3VQDJHHXNDLB3ZV54RQV
+
 jobs:
   frontend:
     name: Lint, typecheck, test, build
