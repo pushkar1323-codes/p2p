@@ -18,19 +18,26 @@
  * collapsing to one honest "in progress" message is more accurate
  * than inventing a stage the hook doesn't actually report.
  *
- * `failure` maps to `failed` rather than `rejected`: wallet rejection
- * is represented by `useLoanRegistryWrite` as
- * `status: "failure"` + `error.code: "REJECTED"` (a deliberate L2-P06
- * decision — see CURRENT_STATUS.md), not a separate status value, so
- * there is no `pending`/`success`/`failure` state that maps to
- * `rejected` here.
+ * `failure` maps to `rejected` specifically when the underlying error
+ * is a wallet rejection (`error.code === "REJECTED"`), and to `failed`
+ * for every other failure. `useLoanRegistryWrite` represents a wallet
+ * rejection as `status: "failure"` with `error.code: "REJECTED"`
+ * rather than as its own status value, so this is where that
+ * distinction is recovered for display — without it, a rejected
+ * contract write would show the generic "The transaction could not be
+ * completed." instead of the same clear "Transaction rejected…"
+ * message the XLM transfer flow already shows for the identical user
+ * action. `error` is intentionally a minimal structural type (just
+ * `.code`), not the real `ContractWriteError`, so this module stays
+ * dependency-light.
  */
 
 import type { ContractWriteStatus } from "@/hooks/contractWriteState";
 import type { TransferStatus } from "@/lib/stellar/types";
 
 export function contractWriteStatusToFeedbackStatus(
-  status: ContractWriteStatus
+  status: ContractWriteStatus,
+  error?: { code: string } | null
 ): TransferStatus {
   switch (status) {
     case "idle":
@@ -40,6 +47,6 @@ export function contractWriteStatusToFeedbackStatus(
     case "success":
       return "confirmed";
     case "failure":
-      return "failed";
+      return error?.code === "REJECTED" ? "rejected" : "failed";
   }
 }

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { AddressChip } from "@/components/ui/AddressChip";
-import { PlusIcon, CheckCircleIcon, UserIcon } from "@/components/ui/icons";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { PlusIcon, CheckCircleIcon, UserIcon, RefreshIcon } from "@/components/ui/icons";
 import { TransactionFeedback } from "@/components/transaction/TransactionFeedback";
 import { contractWriteStatusToFeedbackStatus } from "@/components/transaction/contractWriteFeedback";
 import { testnetExplorerUrl } from "@/lib/stellar/transaction";
@@ -25,32 +26,28 @@ interface LoanRequestActionsProps {
   onSuccess?: () => void;
   /**
    * Called once per successful write with the contract's own decoded
-   * `created` event (L2-P08), so a sibling component (e.g. Loan
-   * Lookup) can synchronize if it happens to be showing the affected
-   * loan. Not called if the event couldn't be decoded — there is
-   * nothing real to report in that case.
+   * `created` event, so a sibling component (e.g. Loan Lookup) can
+   * synchronize if it happens to be showing the affected loan. Not
+   * called if the event couldn't be decoded — there is nothing real
+   * to report in that case.
    */
   onEvent?: (event: LoanRegistryEvent) => void;
 }
 
 /**
- * Create-only loan request form, gated on eligibility
- * (L3-P07/L3-P14 self-registration correction): a connected wallet
- * that isn't yet eligible sees `RegisterWalletAction` instead of this
- * form — a real, separate, wallet-signed transaction against
+ * Create-only loan request form, gated on eligibility: a connected
+ * wallet that isn't yet eligible sees `RegisterWalletAction` instead
+ * of this form — a real, separate, wallet-signed transaction against
  * `eligibility_registry`, not a frontend-only bypass of the on-chain
  * check `create_loan_request` still performs.
  *
- * FCP-04: this component previously also offered a raw "cancel by
- * loan ID" form, sharing `useLoanRegistryWrite`'s idle/pending/
- * success/failure state across a Create/Cancel tab pair. That cancel
- * path is removed here — it duplicated `LoanDetailSection`'s cancel
- * action (reached from Browse Loans/My Loans) without any of its
- * state awareness (it would accept any ID, whether or not the loan
- * was actually open or owned by the connected wallet, relying purely
- * on the contract to reject it). One state-aware cancel path is
- * enough; keeping both was confusing, not merely duplicated pixels.
- * Cancelling a loan is now only ever done from Loan Details.
+ * Cancelling a loan is only available from Loan Details, not from
+ * here. A separate cancel-by-ID form here would duplicate that
+ * state-aware cancel action without any of its safeguards — it would
+ * accept any ID regardless of whether the loan is actually open or
+ * owned by the connected wallet, relying purely on the contract to
+ * reject it. One state-aware cancel path avoids the confusion of two
+ * differently-behaved ways to cancel the same loan.
  */
 export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }: LoanRequestActionsProps) {
   const [amount, setAmount] = useState("");
@@ -66,11 +63,11 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
   // produced a decoded event — a ref (not state) tracks which txHash
   // was already reported, so this doesn't re-fire on unrelated
   // re-renders and doesn't require onEvent to be stable/memoized.
-  // FCP-03: the same guard also reports the event to the backend's
-  // history API exactly once — see reportConfirmedLoanEvent's doc
-  // comment for why this is the only place either backend table gets
-  // written to, and why a failure there is fire-and-forget (logged,
-  // never surfaced here — the on-chain write already succeeded).
+  // The same guard also reports the event to the backend's history
+  // API exactly once — see reportConfirmedLoanEvent's doc comment for
+  // why this is the only place either backend table gets written to,
+  // and why a failure there is fire-and-forget (logged, never
+  // surfaced here — the on-chain write already succeeded).
   const reportedTxHashRef = useRef<string | null>(null);
   useEffect(() => {
     if (status !== "success" || !txHash || !result?.event) return;
@@ -129,18 +126,19 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
       ) : view === "loading" ? (
         <p className={styles.disabledText}>Checking your wallet&apos;s eligibility…</p>
       ) : view === "error" ? (
-        <div className={styles.form}>
-          <p className={styles.hint}>
-            Couldn&apos;t check this wallet&apos;s eligibility: {eligibility.error?.message}
-          </p>
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            onClick={eligibility.refresh}
-          >
-            Try again
-          </button>
-        </div>
+        <ErrorState
+          message={`Couldn't check this wallet's eligibility: ${eligibility.error?.message ?? ""}`}
+          action={
+            <button
+              type="button"
+              className={styles.retryButton}
+              onClick={eligibility.refresh}
+            >
+              <RefreshIcon width={14} height={14} />
+              Try again
+            </button>
+          }
+        />
       ) : view === "register" && address ? (
         <RegisterWalletAction address={address} onRegistered={handleRegistered} />
       ) : (
@@ -174,7 +172,7 @@ export function LoanRequestActions({ walletStatus, address, onSuccess, onEvent }
       {connected && status !== "idle" && (
         <div className={styles.feedback}>
           <TransactionFeedback
-            status={contractWriteStatusToFeedbackStatus(status)}
+            status={contractWriteStatusToFeedbackStatus(status, error)}
             hash={txHash}
             // TransactionFeedback's `error` prop is typed as
             // TransferError (its `code` union is transfer-specific);

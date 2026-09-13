@@ -125,3 +125,21 @@
 .secondaryButton:hover {
   background: var(--p2p-bg);
 }
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--p2p-radius-sm);
+  border: 1px solid var(--p2p-red-600);
+  background: transparent;
+  color: var(--p2p-red-600);
+  font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retryButton:hover {
+  background: var(--p2p-red-50);
+}

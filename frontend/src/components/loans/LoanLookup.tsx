@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { AddressChip } from "@/components/ui/AddressChip";
-import { SearchIcon, AlertIcon, LoanIcon, RefreshIcon } from "@/components/ui/icons";
+import { SearchIcon, LoanIcon, RefreshIcon } from "@/components/ui/icons";
 import { useLoanRequest } from "@/hooks/useLoanRequest";
 import type { LoanRegistryEvent } from "@/lib/stellar/loanRegistryEvents";
 import { LoanStatusBadge } from "./LoanStatusBadge";
@@ -17,11 +18,11 @@ const LOAN_ID_PATTERN = /^\d+$/;
 interface LoanLookupProps {
   /**
    * The most recent confirmed `create`/`cancel` event from
-   * `LoanRequestActions` (L2-P08), if any. When it names the loan
-   * currently shown here, this component re-reads that loan from the
-   * contract automatically — genuine event-driven sync, not a
-   * polling loop, and it does nothing when no loan is being viewed or
-   * the event is about a different loan.
+   * `LoanRequestActions`, if any. When it names the loan currently
+   * shown here, this component re-reads that loan from the contract
+   * automatically — genuine event-driven sync, not a polling loop,
+   * and it does nothing when no loan is being viewed or the event is
+   * about a different loan.
    */
   syncSignal?: LoanRegistryEvent | null;
 }
@@ -166,10 +167,15 @@ export function LoanLookup({ syncSignal }: LoanLookupProps) {
         )}
 
         {status === "error" && !notFound && error && (
-          <div className={styles.errorBox}>
-            <AlertIcon width={16} height={16} />
-            <span>{error.message}</span>
-          </div>
+          <ErrorState
+            message={error.message}
+            action={
+              <button type="button" className={styles.retryButton} onClick={refresh}>
+                <RefreshIcon width={14} height={14} />
+                Try again
+              </button>
+            }
+          />
         )}
       </div>
     </Card>

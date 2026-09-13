@@ -1,5 +1,5 @@
 /**
- * Frontend client for the backend's `/events` history API (FCP-03).
+ * Frontend client for the backend's `/events` history API.
  *
  * Two responsibilities:
  *
@@ -10,11 +10,10 @@
  *    backend about it so it's persisted into `blockchain_transactions`/
  *    `contract_events` and broadcast to any other connected clients.
  *    This is the *only* place either table gets written to — there is
- *    no separate blockchain-watching indexer (see
- *    `docs/CURRENT_STATUS.md`'s FCP-03 note on why). Fire-and-forget
- *    safe: a failure here must never surface as a failure of the
- *    wallet transaction that already succeeded on-chain — same
- *    philosophy as the backend's own broadcaster-failure handling in
+ *    no separate blockchain-watching indexer. Fire-and-forget safe: a
+ *    failure here must never surface as a failure of the wallet
+ *    transaction that already succeeded on-chain — same philosophy as
+ *    the backend's own broadcaster-failure handling in
  *    `eventProcessing.ts`.
  *
  * 2. `fetchLoanEventHistory` — queries persisted history for the
@@ -91,10 +90,29 @@ export function parseHistoryEvent(value: unknown): LoanHistoryEvent | null {
   };
 }
 
+/**
+ * Stable, machine-readable codes for `LoanEventHistoryError`, so this
+ * error type follows the same `{code, message}` convention every
+ * other error type in this codebase uses (`AppError`, `WalletError`,
+ * `TransferError`, `LoanRegistryError`, `ContractWriteError`) instead
+ * of exposing only a free-form message. `code` defaults to
+ * `"UNKNOWN"` so the existing single-argument
+ * `new LoanEventHistoryError(message)` call in `useLoanEventHistory.ts`
+ * keeps compiling and behaving exactly as before.
+ */
+export type LoanEventHistoryErrorCode =
+  | "NETWORK_ERROR"
+  | "BAD_RESPONSE"
+  | "MALFORMED_RESPONSE"
+  | "UNKNOWN";
+
 export class LoanEventHistoryError extends Error {
-  constructor(message: string) {
+  public readonly code: LoanEventHistoryErrorCode;
+
+  constructor(message: string, code: LoanEventHistoryErrorCode = "UNKNOWN") {
     super(message);
     this.name = "LoanEventHistoryError";
+    this.code = code;
   }
 }
 
@@ -110,23 +128,35 @@ export async function fetchLoanEventHistory(
   try {
     response = await fetch(`${eventsHistoryUrl()}${buildEventsHistoryQuery(filters)}`);
   } catch {
-    throw new LoanEventHistoryError("Could not reach the backend. Check your connection and try again.");
+    throw new LoanEventHistoryError(
+      "Could not reach the backend. Check your connection and try again.",
+      "NETWORK_ERROR",
+    );
   }
 
   if (!response.ok) {
-    throw new LoanEventHistoryError("The backend could not return transaction history right now.");
+    throw new LoanEventHistoryError(
+      "The backend could not return transaction history right now.",
+      "BAD_RESPONSE",
+    );
   }
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    throw new LoanEventHistoryError("The backend returned an unexpected response.");
+    throw new LoanEventHistoryError(
+      "The backend returned an unexpected response.",
+      "MALFORMED_RESPONSE",
+    );
   }
 
   const events = (body as { events?: unknown[] } | null)?.events;
   if (!Array.isArray(events)) {
-    throw new LoanEventHistoryError("The backend returned an unexpected response.");
+    throw new LoanEventHistoryError(
+      "The backend returned an unexpected response.",
+      "MALFORMED_RESPONSE",
+    );
   }
 
   return events.map(parseHistoryEvent).filter((event): event is LoanHistoryEvent => event !== null);

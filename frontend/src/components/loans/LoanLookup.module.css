@@ -116,15 +116,22 @@
   color: var(--p2p-text-tertiary);
 }
 
-.errorBox {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--p2p-space-2);
-  padding: var(--p2p-space-3);
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: var(--p2p-radius-sm);
-  background: var(--p2p-red-50);
+  border: 1px solid var(--p2p-red-600);
+  background: transparent;
   color: var(--p2p-red-600);
   font-size: var(--p2p-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retryButton:hover {
+  background: var(--p2p-red-50);
 }
 
 .syncBadge {

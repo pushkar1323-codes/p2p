@@ -39,14 +39,14 @@ interface LoanDetailSectionProps {
  * state-aware: it only ever offers an action the contract would
  * actually accept, rather than a generic "cancel by ID" form.
  *
- * Funding (L3-P12 correction): a connected wallet that is NOT this
- * loan's borrower sees a real Fund Loan action once the loan is
- * `Open` — `FundLoanAction`, a genuine wallet-signed
- * `fund_loan(lender, loan_id, token, amount)` transaction, exact-full
- * funding only, never editable, never shown as succeeded before the
- * transaction actually confirms. Once `Funded`, this page reads and
- * displays the real funding record via `get_funding` (`useFunding`
- * below) rather than inferring it from local state.
+ * Funding: a connected wallet that is NOT this loan's borrower sees a
+ * real Fund Loan action once the loan is `Open` — `FundLoanAction`, a
+ * genuine wallet-signed `fund_loan(lender, loan_id, token, amount)`
+ * transaction, exact-full funding only, never editable, never shown
+ * as succeeded before the transaction actually confirms. Once
+ * `Funded`, this page reads and displays the real funding record via
+ * `get_funding` (`useFunding` below) rather than inferring it from
+ * local state.
  */
 export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionProps) {
   const { status, data, error, refresh } = useLoanRequest(loanId);
@@ -88,10 +88,10 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
     refresh();
   }
 
-  // FCP-03: reports a successful cancel to the backend's history API
-  // exactly once per confirmed transaction — same guarded-by-txHash
-  // pattern as LoanRequestActions.tsx's own reporting effect (and the
-  // same reasoning: fire-and-forget, since the on-chain cancellation
+  // Reports a successful cancel to the backend's history API exactly
+  // once per confirmed transaction — same guarded-by-txHash pattern
+  // as LoanRequestActions.tsx's own reporting effect (and the same
+  // reasoning: fire-and-forget, since the on-chain cancellation
   // already succeeded by the time this runs).
   const reportedTxHashRef = useRef<string | null>(null);
   useEffect(() => {
@@ -243,7 +243,7 @@ export function LoanDetailSection({ loanId, wallet, onBack }: LoanDetailSectionP
                   {write.status !== "idle" && (
                     <div className={styles.feedback}>
                       <TransactionFeedback
-                        status={contractWriteStatusToFeedbackStatus(write.status)}
+                        status={contractWriteStatusToFeedbackStatus(write.status, write.error)}
                         hash={write.txHash}
                         error={write.error ? { code: "UNKNOWN", message: write.error.message } : null}
                         explorerUrl={write.txHash ? testnetExplorerUrl(write.txHash) : null}

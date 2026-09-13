@@ -13,8 +13,8 @@ interface FundLoanActionProps {
   /** The loan's own requested amount — always sent as-is; there is no
    *  amount input anywhere in this component. The current
    *  loan_registry contract requires funding the exact requested
-   *  amount (L3-P12): partial funding is not supported, and this UI
-   *  must not present it as if it were. */
+   *  amount: partial funding is not supported, and this UI must not
+   *  present it as if it were. */
   amount: bigint;
   /** The one funding token this app currently supports — see
    *  `stellarConfig.nativeXlmSacContractId`'s doc comment for why. */
@@ -37,10 +37,8 @@ interface FundLoanActionProps {
 }
 
 /**
- * Real Fund Loan flow (L3-P12 correction) — replaces the previous
- * neutral "funding isn't available" message now that a real,
- * wallet-signed funding transaction exists. Two steps: review (shows
- * exactly what will be signed, nothing editable), then confirm, which
+ * Real, wallet-signed Fund Loan flow: two steps, review (shows
+ * exactly what will be signed, nothing editable) then confirm, which
  * triggers the actual wallet signature. Never shows "Funded" before
  * `write.status === "success"` — that only happens once the write
  * hook's underlying `fundLoan()` call has resolved, which itself only
@@ -124,7 +122,7 @@ export function FundLoanAction({
       {write.status !== "idle" && (
         <div className={styles.feedback}>
           <TransactionFeedback
-            status={contractWriteStatusToFeedbackStatus(write.status)}
+            status={contractWriteStatusToFeedbackStatus(write.status, write.error)}
             hash={write.txHash}
             // See LoanRequestActions.tsx's identical comment on this
             // remapping — TransactionFeedback only ever reads

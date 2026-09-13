@@ -12,14 +12,20 @@ const TONE: Record<SseConnectionStatus, BadgeTone> = {
   connecting: "neutral",
   open: "success",
   reconnecting: "warning",
-  closed: "neutral",
+  // "closed" is a terminal state reached after retry attempts are
+  // exhausted (see sseClient.ts): live sync has permanently stopped
+  // and won't come back without a page refresh. That's materially
+  // worse than "reconnecting" (still actively trying) or "connecting"
+  // (a benign initial state), so it gets its own, stronger tone
+  // rather than sharing either of theirs.
+  closed: "danger",
 };
 
 /**
- * The realtime (SSE) connection status, as a badge — same
- * label/tone mapping `LoanRegistrySection` originally defined
- * inline, extracted (FCP-02) so Browse Loans/My Loans/Loan Details
- * can show it identically instead of each re-declaring the maps.
+ * The realtime (SSE) connection status, as a badge — a single
+ * label/tone mapping shared by Browse Loans, My Loans, and Loan
+ * Details so each shows connection status identically instead of
+ * re-declaring the same maps.
  */
 export function RealtimeStatusBadge({ status }: { status: SseConnectionStatus }) {
   return <Badge tone={TONE[status]}>{LABEL[status]}</Badge>;
